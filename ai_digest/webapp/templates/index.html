@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>码途日志 发布工作台</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="issue-deck">
+        <div class="deck-copy">
+          <p class="deck-kicker">Maitu Daily Dispatch</p>
+          <h1>码途日志 发布工作台</h1>
+          <p class="deck-summary">
+            先生成，再判断，再发布。这里是 AI 热点日报进入公众号草稿箱前的最后一站。
+          </p>
+          <div class="deck-tags">
+            <span class="deck-tag">亮色纸媒感</span>
+            <span class="deck-tag">公众号草稿流</span>
+            <span class="deck-tag">编辑优先</span>
+          </div>
+        </div>
+        <aside class="signal-board">
+          <div class="signal-head">
+            <div>
+              <p class="signal-label">Issue Signal</p>
+              <h2>当前刊次</h2>
+            </div>
+            <span id="status-badge" class="status-badge">待机</span>
+          </div>
+          <div class="signal-metrics">
+            <div class="metric-card">
+              <span class="metric-label">运行状态</span>
+              <strong id="status-text">--</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">草稿 ID</span>
+              <strong id="draft-id">--</strong>
+            </div>
+          </div>
+          <p id="status-detail" class="status-detail">等待生成草稿。</p>
+        </aside>
+      </header>
+
+      <main class="workspace-grid">
+        <section class="editor-panel panel-card">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Workflow</p>
+              <h2>稿件编辑区</h2>
+            </div>
+            <div class="action-row">
+              <button id="run" class="action-button primary">生成草稿</button>
+              <button id="publish" class="action-button">提交公众号</button>
+              <button id="refresh" class="action-button ghost">刷新预览</button>
+            </div>
+          </div>
+
+          <div class="editor-toolbar">
+            <span class="tool-chip">LLM 改写</span>
+            <span class="tool-chip">来源筛选</span>
+            <span class="tool-chip">发布前检查</span>
+          </div>
+
+          <div class="editor-frame">
+            <label class="panel-label" for="markdown">Markdown 草稿</label>
+            <textarea id="markdown" placeholder="草稿内容..."></textarea>
+          </div>
+        </section>
+
+        <aside class="preview-panel panel-card">
+          <div class="panel-head side-head">
+            <div>
+              <p class="panel-kicker">Preview</p>
+              <h2>公众号预览</h2>
+            </div>
+          </div>
+          <div class="preview-frame">
+            <div id="preview" class="preview-body"></div>
+          </div>
+        </aside>
+
+        <section class="history-panel panel-card">
+          <div class="panel-head side-head">
+            <div>
+              <p class="panel-kicker">Logbook</p>
+              <h2>最近运行</h2>
+            </div>
+          </div>
+          <ul id="history" class="history-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
