@@ -80,6 +80,11 @@ class ExplodingLinter:
         raise AssertionError("lint should not be called in dry-run mode")
 
 
+class NoOpLinter:
+    def lint(self, markdown: str) -> None:
+        pass
+
+
 class DigestPipelineTest(unittest.TestCase):
     def test_skips_publish_when_candidates_are_insufficient(self) -> None:
         state_store = FakeStateStore()
@@ -591,25 +596,56 @@ class DigestPipelineTest(unittest.TestCase):
 
 
 class PipelineTest(unittest.TestCase):
-    def test_pipeline_runs_cluster_tagger_and_includes_topic_tag(self):
-        from unittest.mock import MagicMock
-        from ai_digest.pipeline import DigestPipeline, DigestRunResult
-        from ai_digest.models import DigestItem
+    def test_pipeline_calls_cluster_tagger_when_injected(self):
+        from unittest.mock import MagicMock, call
+        from ai_digest.pipeline import DigestPipeline
+        from ai_digest.cluster_tagger import ClusterTagger
+        from ai_digest.models import DigestItem, EventCluster
         from datetime import datetime, timezone
 
+        item = DigestItem(
+            title="OpenAI GPT-5", url="https://a.com", source="A",
+            published_at=datetime(2026,4,14,tzinfo=timezone.utc),
+            category="news", score=0.9, dedupe_key="a"
+        )
         mock_collector = MagicMock()
-        mock_collector.collect.return_value = [
-            DigestItem(title="OpenAI GPT-5", url="https://a.com", source="A", published_at=datetime(2026,4,14,tzinfo=timezone.utc), category="news", score=0.9, dedupe_key="a"),
-            DigestItem(title="OpenAI announces GPT-5", url="https://b.com", source="B", published_at=datetime(2026,4,14,tzinfo=timezone.utc), category="news", score=0.88, dedupe_key="b"),
-        ]
-        mock_publisher = MagicMock()
-        mock_publisher.publish.return_value = ""
+        mock_collector.collect.return_value = [item]
 
-        pipeline = DigestPipeline(collector=mock_collector, publisher=mock_publisher, dry_run=True, min_items=1)
+        mock_cluster_tagger = MagicMock(spec=ClusterTagger)
+        mock_cluster_tagger.tag_clusters.return_value = [
+            EventCluster(
+                canonical_title="OpenAI GPT-5", canonical_url="https://a.com",
+                sources=["A"], items=[item], score=0.9, category="event", topic_tag="模型发布"
+            )
+        ]
+
+        mock_publisher = MagicMock()
+        mock_publisher.publish.return_value = "draft_id_123"
+
+        fake_writer = MagicMock()
+        fake_writer.write.return_value = (
+            "# AI 每日新闻速递\n\n"
+            "1. 先看重点。[a](https://a.com)\n\n"
+            "## 今日重点\n\n"
+            "[OpenAI GPT-5](https://a.com)\n\n"
+            "## AI 技术进展\n\n"
+            "还有更多内容。\n"
+        )
+
+        # dry_run=False to reach the code path, writer required in non-dry-run mode
+        pipeline = DigestPipeline(
+            collector=mock_collector,
+            publisher=mock_publisher,
+            cluster_tagger=mock_cluster_tagger,
+            writer=fake_writer,
+            article_linter=NoOpLinter(),
+            dry_run=False,
+            min_items=1,
+        )
         result = pipeline.run(now=datetime(2026,4,14,tzinfo=timezone.utc))
 
-        assert result.status == "composed"
-        assert len(result.items) >= 1
+        assert result.status == "published"
+        mock_cluster_tagger.tag_clusters.assert_called_once()
 
 
 if __name__ == "__main__":
