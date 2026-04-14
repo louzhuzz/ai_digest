@@ -53,7 +53,20 @@
             <div class="action-row">
               <button id="run" class="action-button primary">生成草稿</button>
               <button id="publish" class="action-button">提交公众号</button>
+              <button id="fact-card-btn" title="事实卡" style="padding:6px 12px; background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; font-size:14px;">📋 事实卡</button>
               <button id="refresh" class="action-button ghost">刷新预览</button>
+            </div>
+          </div>
+
+          <div id="fact-card-panel" style="display:none; position:fixed; top:0; right:0; width:340px; height:100vh; background:white; box-shadow:-2px 0 8px rgba(0,0,0,0.1); z-index:200; overflow-y:auto; padding:16px; box-sizing:border-box;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h3 style="margin:0; font-size:16px;">事实卡</h3>
+              <button id="fact-card-close" style="background:none; border:none; font-size:18px; cursor:pointer;">&times;</button>
+            </div>
+            <div id="fact-card-content" style="font-size:13px; line-height:1.6;">
+              <p style="color:#666;">点击加载...</p>
+            </div>
+          </div>
             </div>
           </div>
 

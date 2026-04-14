@@ -158,3 +158,59 @@ elements.markdown.oninput = (evt) => {
 fetchPreview();
 fetchHistory();
 setStatus('pending', '等待生成草稿。');
+
+// Fact Card Panel
+const factCardBtn = document.getElementById('fact-card-btn');
+const factCardPanel = document.getElementById('fact-card-panel');
+const factCardClose = document.getElementById('fact-card-close');
+const factCardContent = document.getElementById('fact-card-content');
+
+if (factCardBtn && factCardPanel && factCardClose && factCardContent) {
+  factCardBtn.addEventListener('click', async () => {
+    factCardPanel.style.display = 'block';
+    factCardContent.innerHTML = '<p style="color:#666;">加载中...</p>';
+    try {
+      const res = await fetch('/api/fact-card');
+      const data = await res.json();
+      renderFactCard(data, factCardContent);
+    } catch (e) {
+      factCardContent.innerHTML = '<p style="color:red;">加载失败: ' + e.message + '</p>';
+    }
+  });
+
+  factCardClose.addEventListener('click', () => {
+    factCardPanel.style.display = 'none';
+  });
+}
+
+function renderFactCard(data, container) {
+  if (!data.clusters || data.clusters.length === 0) {
+    container.innerHTML = '<p style="color:#666;">暂无数据，请先生成草稿。</p>';
+    return;
+  }
+
+  const totalItems = data.total_items || 0;
+  const dist = data.source_distribution || {};
+  const distText = Object.entries(dist).map(([k, v]) => `${k}: ${v}`).join(' / ') || '无';
+
+  let html = `<p style="margin:0 0 12px 0; color:#374151; font-size:14px;"><strong>${totalItems} 条入选</strong> &nbsp;${distText}</p>`;
+
+  data.clusters.forEach(cluster => {
+    const tag = cluster.topic_tag || '未分类';
+    const title = cluster.canonical_title || cluster.title || '';
+    const sources = Array.isArray(cluster.sources) ? cluster.sources.join(', ') : (cluster.sources || '');
+    const isMulti = sources.includes(',');
+    const multiBadge = isMulti ? '✅ 多源' : '❌ 单源';
+
+    html += `<div style="border:1px solid #e5e7eb; border-radius:6px; padding:10px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="background:#dbeafe; color:#1d4ed8; font-size:11px; padding:2px 6px; border-radius:3px;">${tag}</span>
+        <span style="font-size:11px; color:#9ca3af;">${multiBadge}</span>
+      </div>
+      <p style="margin:6px 0 0 0; font-size:13px; color:#111;">${title}</p>
+      <p style="margin:2px 0 0 0; font-size:11px; color:#6b7280;">来源: ${sources}</p>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
