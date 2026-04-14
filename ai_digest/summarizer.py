@@ -78,5 +78,6 @@ class DigestPayloadBuilder:
             "sources": list(cluster.sources),
             "score": cluster.score,
             "category": cluster.category,
+            "topic_tag": cluster.topic_tag,
             "items": [self._serialize_item(item) for item in cluster.items],
         }

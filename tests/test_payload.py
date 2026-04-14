@@ -127,6 +127,24 @@ class DigestPayloadBuilderTest(unittest.TestCase):
         self.assertEqual(len(payload["top_project_clusters"]), 1)
         self.assertEqual(payload["top_project_clusters"][0]["canonical_url"], "https://github.com/example/archon")
 
+    def test_serialize_cluster_includes_topic_tag(self) -> None:
+        from ai_digest.summarizer import DigestPayloadBuilder
+        from ai_digest.models import DigestItem, EventCluster
+        from datetime import datetime, timezone
+        item = DigestItem(
+            title="Test", url="https://x.com", source="X",
+            published_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+            category="news", score=0.5, dedupe_key="x"
+        )
+        cluster = EventCluster(
+            canonical_title="Test", canonical_url="https://x.com",
+            sources=["X"], items=[item], score=0.5, category="event",
+            topic_tag="模型发布"
+        )
+        builder = DigestPayloadBuilder()
+        serialized = builder._serialize_cluster(cluster)
+        self.assertEqual(serialized["topic_tag"], "模型发布")
+
 
 if __name__ == "__main__":
     unittest.main()
