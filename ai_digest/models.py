@@ -27,3 +27,4 @@ class EventCluster:
     items: list[DigestItem]
     score: float
     category: str
+    topic_tag: str = ""  # 新增

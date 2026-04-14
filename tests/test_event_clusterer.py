@@ -153,6 +153,29 @@ class EventClustererTest(unittest.TestCase):
         self.assertEqual(len(clusters), 2)
         self.assertEqual({cluster.canonical_title for cluster in clusters}, {"OpenAI launches new API", "Anthropic launches new API"})
 
+    def test_cluster_has_topic_tag_field(self) -> None:
+        from ai_digest.models import EventCluster, DigestItem
+        from datetime import datetime, timezone
+        item = DigestItem(
+            title="Test",
+            url="https://example.com",
+            source="Test",
+            published_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+            category="news",
+            score=0.5,
+            dedupe_key="test",
+        )
+        cluster = EventCluster(
+            canonical_title="Test",
+            canonical_url="https://example.com",
+            sources=["Test"],
+            items=[item],
+            score=0.5,
+            category="event",
+            topic_tag="模型发布",  # 新字段
+        )
+        assert cluster.topic_tag == "模型发布"
+
 
 if __name__ == "__main__":
     unittest.main()
