@@ -6,17 +6,31 @@ from datetime import datetime, timezone
 from ai_digest.cluster_tagger import ClusterTagger
 from ai_digest.models import DigestItem, EventCluster
 
+class _Response:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self):
+        return self._body
+
+
 class MockArkTransport:
     def __init__(self, response_content: str):
         self.response_content = response_content
         self.last_request = None
 
     def __call__(self, req, timeout=None):
-        import io, json
         self.last_request = req
-        # MockArkTransport receives the content that goes in choices[0].message.content
-        response = {"choices": [{"message": {"content": self.response_content}}]}
-        return io.BytesIO(json.dumps(response, ensure_ascii=False).encode("utf-8"))
+        data = json.dumps({
+            "choices": [{"message": {"content": self.response_content}}]
+        }).encode()
+        return _Response(data)
 
 class ClusterTaggerTest(unittest.TestCase):
     def test_tag_clusters_returns_clusters_with_topic_tag(self):
