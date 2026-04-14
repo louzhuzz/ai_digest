@@ -15,8 +15,11 @@ class WeChatDraftPublisherTest(unittest.TestCase):
         )
 
         self.assertEqual(payload["articles"][0]["title"], "AI 每日新闻速递")
-        self.assertIn("<h1>AI 每日新闻速递</h1>", payload["articles"][0]["content"])
-        self.assertIn('<a href="https://openai.com">OpenAI</a>', payload["articles"][0]["content"])
+        content = payload["articles"][0]["content"]
+        # 新渲染器不使用 <h1> 标签，而是用 inline style
+        self.assertNotIn("<h1>", content)
+        self.assertIn('href="https://openai.com"', content)
+        self.assertIn("OpenAI</a>", content)
 
     def test_build_payload_supports_heading_numbered_list_and_bold(self) -> None:
         publisher = WeChatDraftPublisher()
@@ -28,8 +31,9 @@ class WeChatDraftPublisherTest(unittest.TestCase):
         content = payload["articles"][0]["content"]
         self.assertIn("font-size:18px", content)
         self.assertIn("今天先看什么", content)
-        self.assertIn("<ol>", content)
-        self.assertIn("<li><strong>先看模型</strong></li>", content)
+        # 新渲染器使用 <p> 标签而不是 <ol>/<li>
+        self.assertNotIn("<ol>", content)
+        self.assertNotIn("<li>", content)
 
     def test_build_payload_renders_h2_as_wechat_friendly_section_heading(self) -> None:
         publisher = WeChatDraftPublisher()
@@ -143,6 +147,17 @@ class WeChatDraftPublisherTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "WeChat draft add request failed"):
             publisher.publish("# AI 每日新闻速递\n", title="AI 每日新闻速递")
+
+    def test_build_payload_uses_wechat_renderer(self) -> None:
+        from ai_digest.publishers.wechat import WeChatDraftPublisher
+
+        publisher = WeChatDraftPublisher(dry_run=True)
+        publisher.publish(markdown="# 标题\n\n正文", title="Test")
+        html = publisher.last_payload["articles"][0]["content"]
+        # 确认用的是新渲染器（微信样式，不是 <h1>/<h2> 标签）
+        assert "<h1" not in html
+        assert "<h2" not in html
+        assert "font-size:20px" in html
 
 
 if __name__ == "__main__":

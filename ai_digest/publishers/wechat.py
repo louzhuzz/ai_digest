@@ -11,6 +11,7 @@ from urllib import parse, request
 
 from ..cover_image import generate_cover_image
 from ..http_client import DEFAULT_TIMEOUT_SECONDS
+from ..wechat_renderer import render_wechat_html
 
 
 LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
@@ -158,7 +159,7 @@ class WeChatDraftPublisher:
             "title": title,
             "author": author,
             "digest": digest or title,
-            "content": markdown_to_html(markdown),
+            "content": render_wechat_html(markdown),
             "content_source_url": content_source_url,
             "thumb_media_id": cover_media_id,
             "need_open_comment": 1,
