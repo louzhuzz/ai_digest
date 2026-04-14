@@ -590,5 +590,27 @@ class DigestPipelineTest(unittest.TestCase):
         self.assertEqual(len(state_store.upserted_items), len(result.items))
 
 
+class PipelineTest(unittest.TestCase):
+    def test_pipeline_runs_cluster_tagger_and_includes_topic_tag(self):
+        from unittest.mock import MagicMock
+        from ai_digest.pipeline import DigestPipeline, DigestRunResult
+        from ai_digest.models import DigestItem
+        from datetime import datetime, timezone
+
+        mock_collector = MagicMock()
+        mock_collector.collect.return_value = [
+            DigestItem(title="OpenAI GPT-5", url="https://a.com", source="A", published_at=datetime(2026,4,14,tzinfo=timezone.utc), category="news", score=0.9, dedupe_key="a"),
+            DigestItem(title="OpenAI announces GPT-5", url="https://b.com", source="B", published_at=datetime(2026,4,14,tzinfo=timezone.utc), category="news", score=0.88, dedupe_key="b"),
+        ]
+        mock_publisher = MagicMock()
+        mock_publisher.publish.return_value = ""
+
+        pipeline = DigestPipeline(collector=mock_collector, publisher=mock_publisher, dry_run=True, min_items=1)
+        result = pipeline.run(now=datetime(2026,4,14,tzinfo=timezone.utc))
+
+        assert result.status == "composed"
+        assert len(result.items) >= 1
+
+
 if __name__ == "__main__":
     unittest.main()

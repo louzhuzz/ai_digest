@@ -7,6 +7,7 @@ from typing import Any
 from .composition import DigestComposer
 from .dedupe import RecentDedupeFilter
 from .article_linter import ArticleLinter
+from .cluster_tagger import ClusterTagger
 from .event_clusterer import EventClusterer
 from .models import DigestItem
 from .ranking import ItemRanker
@@ -36,6 +37,7 @@ class DigestPipeline:
         composer: DigestComposer | None = None,
         section_picker: SectionPicker | None = None,
         article_linter: ArticleLinter | None = None,
+        cluster_tagger: ClusterTagger | None = None,
         dry_run: bool = True,
         min_items: int = 3,
     ) -> None:
@@ -50,6 +52,7 @@ class DigestPipeline:
         self.composer = composer or DigestComposer()
         self.section_picker = section_picker or SectionPicker()
         self.article_linter = article_linter or ArticleLinter()
+        self.cluster_tagger = cluster_tagger
         self.dry_run = dry_run
         self.min_items = min_items
 
@@ -94,10 +97,13 @@ class DigestPipeline:
                     markdown=None,
                     items=summarized,
                 )
+            clusters = self.clusterer.cluster(quota_items)
+            if self.cluster_tagger is not None:
+                clusters = self.cluster_tagger.tag_clusters(clusters)
             article_input = self.payload_builder.build_article_input(
                 quota_items,
                 date=str(payload["date"]),
-                clusters=self.clusterer.cluster(quota_items),
+                clusters=clusters,
             )
             markdown = self.writer.write(article_input)
             try:
