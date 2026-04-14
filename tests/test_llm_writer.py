@@ -4,6 +4,7 @@ import json
 import unittest
 
 from ai_digest.llm_writer import ARKArticleWriter, SYSTEM_PROMPT
+from ai_digest.outline_generator import Outline, SectionSpec
 
 
 class _Response:
@@ -125,6 +126,40 @@ class ARKArticleWriterTest(unittest.TestCase):
                     "signal_pool_size": 2,
                 }
             )
+
+
+class ARKArticleWriterRenderTest(unittest.TestCase):
+    def test_render_accepts_outline_and_article_input(self):
+        # Valid UTF-8 bytes representing: # AI 每日热点\n\n今天有三条值得关注的动态。\n\n## 模型发布\n\nOpenAI 发布 GPT-5。
+        body = (
+            b'{"choices":[{"message":{"content":"# AI \xe6\xaf\x8f\xe6\x97\xa5\xe7\x83\xad\xe7\x82\xb9'
+            b'\\n\\n\xe4\xbb\x8a\xe5\xa4\xa9\xe6\x9c\x89\xe4\xb8\x89\xe6\x9d\xa1\xe5\x80\xbc\xe5\xbe\x97'
+            b'\xe5\x85\xb3\xe6\xb3\xa8\xe7\x9a\x84\xe5\x8a\xa8\xe6\x80\x81\xe3\x80\x82'
+            b'\\n\\n## \xe6\xa8\xa1\xe5\x9e\x8b\xe5\x8f\x91\xe5\xb8\x83'
+            b'\\n\\nOpenAI \xe5\x8f\x91\xe5\xb8\x83 GPT-5\xe3\x80\x82"}}]}'
+        )
+        transport = FakeTransport(body=body)
+        writer = ARKArticleWriter(
+            api_key="ark-key",
+            base_url="https://ark.example.com/api/v3",
+            model="ep-model",
+            timeout_seconds=30,
+            transport=transport,
+        )
+        outline = Outline(
+            title="AI \u70ed\u70b9\u65e5\u62a5",
+            lede="\u4eca\u5929\u6709\u4e09\u6761\u503c\u5f97\u5173\u6ce8\u7684\u52a8\u6001\u3002",
+            sections=[
+                SectionSpec(
+                    heading="\u6a21\u578b\u53d1\u5e03",
+                    key_points=["OpenAI \u53d1\u5e03 GPT-5"],
+                    source_hints=["\u673a\u5668\u4e4b\u5fc3"],
+                ),
+            ],
+        )
+        markdown = writer.render(outline, {"date": "2026-04-14", "items": []})
+        self.assertTrue(markdown.startswith("# "))
+        self.assertTrue("\u6a21\u578b\u53d1\u5e03" in markdown or "GPT" in markdown)
 
 
 if __name__ == "__main__":

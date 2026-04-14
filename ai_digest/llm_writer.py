@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from urllib import request
 
+from .outline_generator import Outline, SectionSpec
+
 
 SYSTEM_PROMPT = """你在写一篇面向开发者的 AI 热点日报。
 输入是一组热点候选池，不是固定栏目草稿。
@@ -86,3 +88,74 @@ class ARKArticleWriter:
     def _validate_markdown(self, markdown: str) -> None:
         if not markdown.startswith("# "):
             raise RuntimeError("LLM output missing title")
+
+    RENDER_SYSTEM_PROMPT = """你是一个 AI 热点日报编辑。请根据以下大纲和原始素材，写成一篇公众号文章。
+
+要求：
+- 按大纲结构写作
+- key_points 提到的每条事实都要覆盖
+- 写得像公众号，有判断和取舍
+- 最终输出为 Markdown 格式，只使用 # ## ### 段落 列表 加粗 链接
+"""
+
+    def render(self, outline: Outline, article_input: dict[str, object]) -> str:
+        outline_json = json.dumps(
+            {
+                "title": outline.title,
+                "lede": outline.lede,
+                "sections": [
+                    {
+                        "heading": s.heading,
+                        "key_points": s.key_points,
+                        "source_hints": s.source_hints,
+                    }
+                    for s in outline.sections
+                ],
+            },
+            ensure_ascii=False,
+        )
+        user_content = f"""大纲：
+{outline_json}
+
+原始素材：
+{json.dumps(article_input, ensure_ascii=False)}
+
+要求：
+- 按大纲结构写作
+- key_points 提到的每条事实都要覆盖
+- 写得像公众号
+- 最终输出为 Markdown 格式"""
+
+        url = f"{self.base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": self.RENDER_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+        }
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        opener = self.transport or request.urlopen
+        try:
+            with opener(req, timeout=self.timeout_seconds) as response:
+                decoded = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"ARK article render failed: {exc}") from exc
+
+        choices = decoded.get("choices") or []
+        if not choices:
+            raise RuntimeError(f"ARK response missing choices: {decoded}")
+        markdown = str(choices[0].get("message", {}).get("content", "")).strip()
+        if not markdown:
+            raise RuntimeError(f"ARK response missing content: {decoded}")
+        self._validate_markdown(markdown)
+        return markdown
