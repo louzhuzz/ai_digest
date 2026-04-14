@@ -209,6 +209,37 @@ class WebAppApiTest(unittest.TestCase):
             self.assertEqual(second.json()["draft_id"], "draft-xyz")
             self.assertEqual(len(publisher.calls), 1)
 
+    def test_fact_card_returns_cluster_summary(self) -> None:
+        import json
+        from pathlib import Path
+        from fastapi.testclient import TestClient
+        from ai_digest.webapp.app import create_app
+
+        storage_root = Path(tempfile.mkdtemp())
+        app = create_app(storage_root=storage_root)
+        client = TestClient(app)
+
+        # 写入 run_data.json
+        run_data = {
+            "clusters": [
+                {"topic_tag": "模型发布", "sources": ["机器之心", "量子位"], "canonical_title": "OpenAI GPT-5"},
+                {"topic_tag": "开源项目", "sources": ["GitHub"], "canonical_title": "Archon"},
+            ],
+            "total_items": 5,
+            "source_distribution": {"news": 3, "github": 2},
+            "high_signal_dropped": [],
+        }
+        storage_root.joinpath("run_data.json").write_text(json.dumps(run_data), encoding="utf-8")
+
+        response = client.get("/api/fact-card")
+        assert response.status_code == 200
+        data = response.json()
+        assert "clusters" in data
+        assert len(data["clusters"]) == 2
+        assert data["clusters"][0]["topic_tag"] == "模型发布"
+        assert data["total_items"] == 5
+        assert data["source_distribution"]["news"] == 3
+
 
 if __name__ == "__main__":
     unittest.main()

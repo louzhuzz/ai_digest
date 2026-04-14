@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from pathlib import Path
@@ -66,6 +67,26 @@ def create_app(
         if result.markdown:
             storage.write_markdown(result.markdown)
             storage.write_html(markdown_to_html(result.markdown))
+        # 写 fact-card 数据
+        from collections import Counter
+        items = getattr(result, "items", []) or []
+        source_dist = dict(Counter(item.source for item in items))
+        run_data = {
+            "clusters": [
+                {
+                    "topic_tag": getattr(item, "topic_tag", ""),
+                    "sources": [item.source],
+                    "canonical_title": item.title,
+                }
+                for item in items
+            ],
+            "total_items": len(items),
+            "source_distribution": source_dist,
+            "high_signal_dropped": [],
+        }
+        run_data_path = root / "run_data.json"
+        with run_data_path.open("w", encoding="utf-8") as f:
+            json.dump(run_data, f, ensure_ascii=False)
         storage.append_history(
             {
                 "mode": "run",
@@ -155,6 +176,20 @@ def create_app(
     @app.get("/api/history")
     def history() -> dict[str, Any]:
         return {"items": storage.read_history(limit=20)}
+
+    @app.get("/api/fact-card")
+    def fact_card() -> dict[str, Any]:
+        run_data_path = root / "run_data.json"
+        if not run_data_path.exists():
+            return {"clusters": [], "total_items": 0, "source_distribution": {}, "high_signal_dropped": []}
+        with run_data_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "clusters": data.get("clusters", []),
+            "total_items": data.get("total_items", 0),
+            "source_distribution": data.get("source_distribution", {}),
+            "high_signal_dropped": data.get("high_signal_dropped", []),
+        }
 
     return app
 
