@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
 
 if TestClient is not None:
     from ai_digest.webapp.app import create_app
+    from ai_digest.settings import AppSettings
 
 
 class FakeResult:
@@ -27,6 +30,14 @@ class FakeRunner:
         return FakeResult()
 
 
+class RecordingRunner:
+    def __init__(self, settings) -> None:
+        self.settings = settings
+
+    def run(self) -> FakeResult:
+        return FakeResult()
+
+
 class FakePublisher:
     def __init__(self) -> None:
         self.calls = []
@@ -36,9 +47,32 @@ class FakePublisher:
         return "draft-xyz"
 
 
+class BlockingPublisher:
+    def __init__(self) -> None:
+        self.calls = []
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def publish(self, markdown: str, title: str = "AI 每日新闻速递") -> str:
+        self.calls.append((markdown, title))
+        self.started.set()
+        self.release.wait(timeout=2)
+        return "draft-blocked"
+
+
 class FakeSettings:
     def __init__(self, dry_run: bool) -> None:
         self.dry_run = dry_run
+
+
+def _fake_publish_enabled_settings() -> AppSettings:
+    return AppSettings(
+        wechat=None,
+        ark=None,
+        dry_run=False,
+        draft_mode=True,
+        state_db_path=Path("data/state.db"),
+    )
 
 
 @unittest.skipIf(TestClient is None, "fastapi not installed")
@@ -74,6 +108,28 @@ class WebAppApiTest(unittest.TestCase):
             self.assertEqual(preview.status_code, 200)
             self.assertIn("markdown", preview.json())
 
+    def test_run_does_not_publish_even_when_settings_are_publish_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            seen = {}
+
+            def runner_factory(settings):
+                seen["dry_run"] = settings.dry_run
+                seen["draft_mode"] = settings.draft_mode
+                return RecordingRunner(settings)
+
+            app = create_app(
+                storage_root=Path(tmpdir),
+                runner_factory=runner_factory,
+                settings_loader=_fake_publish_enabled_settings,
+            )
+            client = TestClient(app)
+
+            resp = client.post("/api/run")
+
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(seen["dry_run"])
+            self.assertFalse(seen["draft_mode"])
+
     def test_update_and_publish(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             publisher = FakePublisher()
@@ -91,6 +147,67 @@ class WebAppApiTest(unittest.TestCase):
             self.assertEqual(publish.status_code, 200)
             self.assertEqual(publish.json()["status"], "published")
             self.assertEqual(publisher.calls[0][1], "Title")
+
+    def test_publish_rejects_concurrent_duplicate_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            publisher = BlockingPublisher()
+            app = create_app(
+                storage_root=Path(tmpdir),
+                settings_loader=lambda: FakeSettings(dry_run=False),
+                publisher_factory=lambda settings: publisher,
+                linter_factory=lambda: type("Linter", (), {"lint": lambda self, md: None})(),
+            )
+            client = TestClient(app)
+            client.post(
+                "/api/update",
+                json={"markdown": "# Title\n\n1. x\n\n[link](https://example.com/a)\n[link](https://example.com/b)\n[link](https://example.com/c)\n"},
+            )
+
+            responses = []
+
+            def send_publish() -> None:
+                responses.append(client.post("/api/publish"))
+
+            first = threading.Thread(target=send_publish)
+            second = threading.Thread(target=send_publish)
+
+            first.start()
+            publisher.started.wait(timeout=1)
+            second.start()
+            time.sleep(0.1)
+            publisher.release.set()
+            first.join()
+            second.join()
+
+            payloads = [resp.json() for resp in responses]
+            self.assertEqual(len(publisher.calls), 1)
+            self.assertEqual(sum(1 for item in payloads if item["status"] == "published"), 1)
+            self.assertEqual(sum(1 for item in payloads if item["status"] == "failed"), 1)
+            self.assertTrue(any("already in progress" in item["error"] for item in payloads if item["status"] == "failed"))
+
+    def test_publish_returns_same_draft_for_immediate_duplicate_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            publisher = FakePublisher()
+            app = create_app(
+                storage_root=Path(tmpdir),
+                settings_loader=lambda: FakeSettings(dry_run=False),
+                publisher_factory=lambda settings: publisher,
+                linter_factory=lambda: type("Linter", (), {"lint": lambda self, md: None})(),
+            )
+            client = TestClient(app)
+            client.post(
+                "/api/update",
+                json={"markdown": "# Title\n\n1. x\n\n[link](https://example.com/a)\n[link](https://example.com/b)\n[link](https://example.com/c)\n"},
+            )
+
+            first = client.post("/api/publish")
+            second = client.post("/api/publish")
+
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(second.status_code, 200)
+            self.assertEqual(first.json()["draft_id"], "draft-xyz")
+            self.assertEqual(second.json()["draft_id"], "draft-xyz")
+            self.assertEqual(len(publisher.calls), 1)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ class RecentDedupeFilter:
                 continue
 
             last_seen = recent_keys.get(key)
-            if last_seen is not None and current_time - last_seen <= self.window:
+            if last_seen is not None and last_seen.date() != current_time.date() and current_time - last_seen <= self.window:
                 continue
 
             seen_in_run.add(key)

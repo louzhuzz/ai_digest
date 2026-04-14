@@ -17,6 +17,21 @@ LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
 ORDERED_LIST_PATTERN = re.compile(r"\d+\.\s+(.*)")
 
+WECHAT_H2_STYLE = (
+    "margin:1.4em 0 0.55em;"
+    "font-size:22px;"
+    "font-weight:700;"
+    "line-height:1.45;"
+    "color:#1f2937;"
+)
+WECHAT_H3_STYLE = (
+    "margin:1em 0 0.45em;"
+    "font-size:18px;"
+    "font-weight:700;"
+    "line-height:1.5;"
+    "color:#334155;"
+)
+
 
 def _render_inline(text: str) -> str:
     parts: list[str] = []
@@ -64,7 +79,9 @@ def markdown_to_html(markdown: str) -> str:
             if in_ordered_list:
                 parts.append("</ol>")
                 in_ordered_list = False
-            parts.append(f"<h2>{_render_inline(line[3:].strip())}</h2>")
+            parts.append(
+                f'<p style="{WECHAT_H2_STYLE}"><strong>{_render_inline(line[3:].strip())}</strong></p>'
+            )
             continue
 
         if line.startswith("### "):
@@ -74,7 +91,9 @@ def markdown_to_html(markdown: str) -> str:
             if in_ordered_list:
                 parts.append("</ol>")
                 in_ordered_list = False
-            parts.append(f"<h3>{_render_inline(line[4:].strip())}</h3>")
+            parts.append(
+                f'<p style="{WECHAT_H3_STYLE}"><strong>{_render_inline(line[4:].strip())}</strong></p>'
+            )
             continue
 
         if line.startswith("- "):

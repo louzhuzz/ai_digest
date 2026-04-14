@@ -39,17 +39,17 @@ class FakeTransport:
 
 
 class ARKArticleWriterTest(unittest.TestCase):
-    def test_system_prompt_constrains_supported_markdown_subset(self) -> None:
+    def test_system_prompt_prioritizes_natural_wechat_article_over_rigid_template(self) -> None:
         self.assertIn("热点候选池", SYSTEM_PROMPT)
-        self.assertIn("不要直接写“今日没有新增重大行业新闻”", SYSTEM_PROMPT)
-        self.assertIn("至少保留 2 处加粗", SYSTEM_PROMPT)
-        self.assertIn("一个编号速览", SYSTEM_PROMPT)
-        self.assertIn("不要满篇编号列表", SYSTEM_PROMPT)
-        self.assertIn("###", SYSTEM_PROMPT)
-        self.assertIn("**加粗**", SYSTEM_PROMPT)
-        self.assertIn("代码块", SYSTEM_PROMPT)
-        self.assertIn("表格", SYSTEM_PROMPT)
-        self.assertIn("图片 Markdown", SYSTEM_PROMPT)
+        self.assertIn("自然的公众号文章", SYSTEM_PROMPT)
+        self.assertIn("推荐结构", SYSTEM_PROMPT)
+        self.assertIn("导语", SYSTEM_PROMPT)
+        self.assertIn("编号速览", SYSTEM_PROMPT)
+        self.assertIn("正文展开", SYSTEM_PROMPT)
+        self.assertIn("不允许编造", SYSTEM_PROMPT)
+        self.assertIn("不允许照抄输入里的英文摘要", SYSTEM_PROMPT)
+        self.assertNotIn("至少保留 2 处加粗", SYSTEM_PROMPT)
+        self.assertNotIn("输出必须以 # 一级标题开头", SYSTEM_PROMPT)
 
     def test_ark_writer_posts_chat_completion_request(self) -> None:
         transport = FakeTransport(

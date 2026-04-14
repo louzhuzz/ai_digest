@@ -26,9 +26,22 @@ class WeChatDraftPublisherTest(unittest.TestCase):
         )
 
         content = payload["articles"][0]["content"]
-        self.assertIn("<h3>今天先看什么</h3>", content)
+        self.assertIn("font-size:18px", content)
+        self.assertIn("今天先看什么", content)
         self.assertIn("<ol>", content)
         self.assertIn("<li><strong>先看模型</strong></li>", content)
+
+    def test_build_payload_renders_h2_as_wechat_friendly_section_heading(self) -> None:
+        publisher = WeChatDraftPublisher()
+        payload = publisher.build_payload(
+            title="AI 每日新闻速递",
+            markdown="# AI 每日新闻速递\n\n## 今日重点\n\n正文",
+        )
+
+        content = payload["articles"][0]["content"]
+        self.assertNotIn("<h2>", content)
+        self.assertIn("font-size:22px", content)
+        self.assertIn("今日重点", content)
 
     def test_publish_in_dry_run_mode_does_not_call_api(self) -> None:
         http_client = Mock()

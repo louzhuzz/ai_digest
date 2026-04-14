@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -33,6 +36,8 @@ def create_app(
     app = FastAPI()
     root = storage_root or Path("data")
     storage = DraftStorage(root)
+    publish_lock = threading.Lock()
+    recent_publish: dict[str, Any] = {"fingerprint": "", "draft_id": "", "timestamp": 0.0}
 
     static_dir = Path(__file__).parent / "static"
     template_path = Path(__file__).parent / "templates" / "index.html"
@@ -49,7 +54,14 @@ def create_app(
     @app.post("/api/run")
     def run() -> dict[str, Any]:
         settings = settings_loader()
-        runner = runner_factory(settings)
+        preview_settings = AppSettings(
+            wechat=settings.wechat,
+            ark=settings.ark,
+            dry_run=True,
+            draft_mode=False,
+            state_db_path=settings.state_db_path,
+        )
+        runner = runner_factory(preview_settings)
         result = runner.run()
         if result.markdown:
             storage.write_markdown(result.markdown)
@@ -86,36 +98,59 @@ def create_app(
 
     @app.post("/api/publish")
     def publish() -> dict[str, Any]:
+        if not publish_lock.acquire(blocking=False):
+            return {"status": "failed", "error": "publish already in progress"}
         settings = settings_loader()
-        if settings.dry_run:
-            return {"status": "failed", "error": "WECHAT_DRY_RUN is enabled"}
-        markdown = storage.read_markdown()
-        if not markdown.strip():
-            return {"status": "failed", "error": "no draft markdown found"}
-        linter = linter_factory()
         try:
-            linter.lint(markdown)
-        except Exception as exc:
-            return {"status": "failed", "error": f"Article lint failed: {exc}"}
+            if settings.dry_run:
+                return {"status": "failed", "error": "WECHAT_DRY_RUN is enabled"}
+            markdown = storage.read_markdown()
+            if not markdown.strip():
+                return {"status": "failed", "error": "no draft markdown found"}
+            linter = linter_factory()
+            try:
+                linter.lint(markdown)
+            except Exception as exc:
+                return {"status": "failed", "error": f"Article lint failed: {exc}"}
 
-        publisher = publisher_factory(settings)
-        title = _extract_title(markdown)
-        draft_id = publisher.publish(markdown, title=title)
-        storage.append_history(
-            {
-                "mode": "publish",
+            title = _extract_title(markdown)
+            fingerprint = hashlib.sha256(f"{title}\n{markdown}".encode("utf-8")).hexdigest()
+            now = time.time()
+            if (
+                recent_publish["fingerprint"] == fingerprint
+                and recent_publish["draft_id"]
+                and now - float(recent_publish["timestamp"]) < 15
+            ):
+                return {
+                    "status": "published",
+                    "error": None,
+                    "items_count": 0,
+                    "draft_id": str(recent_publish["draft_id"]),
+                }
+
+            publisher = publisher_factory(settings)
+            draft_id = publisher.publish(markdown, title=title)
+            if draft_id:
+                recent_publish["fingerprint"] = fingerprint
+                recent_publish["draft_id"] = draft_id
+                recent_publish["timestamp"] = now
+            storage.append_history(
+                {
+                    "mode": "publish",
+                    "status": "published" if draft_id else "failed",
+                    "error": None if draft_id else "publish failed",
+                    "items_count": 0,
+                    "draft_id": draft_id,
+                }
+            )
+            return {
                 "status": "published" if draft_id else "failed",
                 "error": None if draft_id else "publish failed",
                 "items_count": 0,
                 "draft_id": draft_id,
             }
-        )
-        return {
-            "status": "published" if draft_id else "failed",
-            "error": None if draft_id else "publish failed",
-            "items_count": 0,
-            "draft_id": draft_id,
-        }
+        finally:
+            publish_lock.release()
 
     @app.get("/api/history")
     def history() -> dict[str, Any]:

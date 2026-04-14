@@ -15,9 +15,6 @@ class ArticleLinter:
         if not text.startswith("# "):
             errors.append("必须以 # 一级标题开头")
 
-        if len(re.findall(r"(?m)^##\s+", text)) < 2:
-            errors.append("至少需要 2 个 ## 二级标题")
-
         if len(re.findall(r"(?m)^\d+\.\s+", text)) < 1:
             errors.append("至少需要 1 个编号速览列表")
 

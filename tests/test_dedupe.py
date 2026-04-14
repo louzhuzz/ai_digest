@@ -79,6 +79,25 @@ class RecentDedupeFilterTest(unittest.TestCase):
         self.assertEqual(state_store.loaded_days, 7)
         self.assertEqual(state_store.loaded_now, now)
 
+    def test_allows_items_seen_earlier_on_same_day(self) -> None:
+        now = datetime(2026, 4, 10, 12, tzinfo=timezone.utc)
+        state_store = FakeStateStore(recent_keys={"openai:new-model": datetime(2026, 4, 10, 8, tzinfo=timezone.utc)})
+        items = [
+            DigestItem(
+                title="OpenAI releases new model",
+                url="https://example.com/openai-new-model",
+                source="OpenAI Blog",
+                published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                category="news",
+                dedupe_key="openai:new-model",
+            ),
+        ]
+
+        deduper = RecentDedupeFilter(window_days=7, state_store=state_store)
+        filtered = deduper.filter(items, now=now)
+
+        self.assertEqual([item.title for item in filtered], ["OpenAI releases new model"])
+
     def test_persist_writes_accepted_items_to_state_store(self) -> None:
         now = datetime(2026, 4, 10, tzinfo=timezone.utc)
         state_store = FakeStateStore()

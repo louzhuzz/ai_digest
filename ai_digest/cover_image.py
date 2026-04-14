@@ -15,6 +15,11 @@ WINDOWS_FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyhbd.ttc",
     r"C:\Windows\Fonts\simhei.ttf",
 ]
+WSL_WINDOWS_FONT_CANDIDATES = [
+    "/mnt/c/Windows/Fonts/msyh.ttc",
+    "/mnt/c/Windows/Fonts/msyhbd.ttc",
+    "/mnt/c/Windows/Fonts/simhei.ttf",
+]
 LINUX_FONT_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
@@ -24,7 +29,10 @@ LINUX_FONT_CANDIDATES = [
 
 
 def _font_candidates() -> list[str]:
-    candidates = list(WINDOWS_FONT_CANDIDATES if os.name == "nt" else LINUX_FONT_CANDIDATES)
+    if os.name == "nt":
+        candidates = list(WINDOWS_FONT_CANDIDATES)
+    else:
+        candidates = list(WSL_WINDOWS_FONT_CANDIDATES) + list(LINUX_FONT_CANDIDATES)
     env_font = os.environ.get("WECHAT_COVER_FONT", "").strip()
     if env_font:
         candidates.insert(0, env_font)
