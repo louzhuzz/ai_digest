@@ -9,7 +9,9 @@ from .collectors.github import GitHubTrendingCollector
 from .collectors.hn import HNFrontPageCollector
 from .collectors.huggingface import HFTrendingCollector
 from .collectors.web_news import WebNewsIndexCollector
+from .cluster_tagger import ClusterTagger
 from .llm_writer import ARKArticleWriter
+from .wechat_image_uploader import WeChatImageUploader
 from .publishers.wechat import WeChatDraftPublisher
 from .state_store import SqliteStateStore
 from .runner import DigestJobRunner
@@ -191,17 +193,20 @@ def build_default_publisher(settings: AppSettings | None = None) -> WeChatDraftP
             appid=settings.wechat.appid,
             appsecret=settings.wechat.appsecret,
         )
+        access_token = token_client.get_access_token()
+        image_uploader = WeChatImageUploader(access_token=access_token) if access_token else None
         return WeChatDraftPublisher(
-            access_token=token_client.get_access_token(),
+            access_token=access_token,
             cover_media_id=settings.wechat.thumb_media_id,
             dry_run=False,
+            image_uploader=image_uploader,
         )
 
     return WeChatDraftPublisher(dry_run=True)
 
 
 def build_default_writer(settings: AppSettings | None = None) -> ARKArticleWriter | None:
-    if settings and settings.ark and not settings.dry_run:
+    if settings and settings.ark and settings.llm_enabled:
         return ARKArticleWriter(
             api_key=settings.ark.api_key,
             base_url=settings.ark.base_url,
@@ -216,10 +221,18 @@ def build_default_runner(
     publisher: WeChatDraftPublisher | None = None,
 ) -> DigestJobRunner:
     deduper = None
+    cluster_tagger = None
     if settings is not None:
         state_store = SqliteStateStore(settings.state_db_path)
         state_store.initialize()
         deduper = RecentDedupeFilter(state_store=state_store)
+        if settings.llm_enabled and settings.ark:
+            cluster_tagger = ClusterTagger(
+                api_key=settings.ark.api_key,
+                base_url=settings.ark.base_url,
+                model=settings.ark.model,
+                timeout_seconds=settings.ark.timeout_seconds,
+            )
     return DigestJobRunner(
         collector_factory=build_default_collector,
         publisher=publisher or build_default_publisher(settings),
@@ -227,4 +240,5 @@ def build_default_runner(
         deduper=deduper,
         dry_run=settings.dry_run if settings is not None else True,
         min_items=3,
+        cluster_tagger=cluster_tagger,
     )
