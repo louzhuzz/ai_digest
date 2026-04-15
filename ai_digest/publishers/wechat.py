@@ -11,10 +11,12 @@ from urllib import parse, request
 
 from ..cover_image import generate_cover_image
 from ..http_client import DEFAULT_TIMEOUT_SECONDS
+from ..wechat_image_uploader import WeChatImageUploader
 from ..wechat_renderer import render_wechat_html
 
 
 LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
 ORDERED_LIST_PATTERN = re.compile(r"\d+\.\s+(.*)")
 
@@ -32,6 +34,7 @@ WECHAT_H3_STYLE = (
     "line-height:1.5;"
     "color:#334155;"
 )
+WECHAT_IMAGE_STYLE = "max-width:100%; height:auto; margin:1em 0; display:block;"
 
 
 def _render_inline(text: str) -> str:
@@ -45,6 +48,10 @@ def _render_inline(text: str) -> str:
     parts.append(html.escape(text[last:]))
     rendered = "".join(parts)
     return BOLD_PATTERN.sub(lambda match: f"<strong>{html.escape(match.group(1))}</strong>", rendered)
+
+
+def _render_image(url: str, alt: str = "") -> str:
+    return f'<img src="{html.escape(url, quote=True)}" alt="{html.escape(alt)}" style="{WECHAT_IMAGE_STYLE}"/>'
 
 
 def markdown_to_html(markdown: str) -> str:
@@ -71,6 +78,18 @@ def markdown_to_html(markdown: str) -> str:
                 parts.append("</ol>")
                 in_ordered_list = False
             parts.append(f"<h1>{_render_inline(line[2:].strip())}</h1>")
+            continue
+
+        img_match = IMAGE_PATTERN.match(line.strip())
+        if img_match:
+            if in_unordered_list:
+                parts.append("</ul>")
+                in_unordered_list = False
+            if in_ordered_list:
+                parts.append("</ol>")
+                in_ordered_list = False
+            alt, url = img_match.groups()
+            parts.append(f"<p>{_render_image(url, alt)}</p>")
             continue
 
         if line.startswith("## "):
@@ -144,6 +163,7 @@ class WeChatDraftPublisher:
     upload_api_url: str = "https://api.weixin.qq.com/cgi-bin/material/add_material"
     cover_image_provider: Callable[[str], bytes] = generate_cover_image
     last_payload: dict[str, Any] | None = None
+    image_uploader: WeChatImageUploader | None = None
 
     def build_payload(
         self,
@@ -168,6 +188,8 @@ class WeChatDraftPublisher:
         return {"articles": [article]}
 
     def publish(self, markdown: str, title: str = "AI 每日新闻速递") -> str:
+        if self.image_uploader is not None:
+            markdown = self.image_uploader.upload_all(markdown)
         if self.dry_run or not self.access_token:
             payload = self.build_payload(title=title, markdown=markdown)
             self.last_payload = payload
