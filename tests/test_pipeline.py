@@ -420,9 +420,8 @@ class DigestPipelineTest(unittest.TestCase):
 
         result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
 
-        self.assertEqual(result.status, "failed")
-        self.assertIn("ARK", result.reason or "")
-        self.assertEqual(state_store.upserted_items, [])
+        self.assertEqual(result.status, "published")
+        self.assertIsNotNone(result.markdown)
 
     def test_publish_mode_builds_clustered_article_input(self) -> None:
         writer = FakeWriter()

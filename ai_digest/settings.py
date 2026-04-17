@@ -53,6 +53,7 @@ class AppSettings:
     ark: ArkCredentials | None
     dry_run: bool
     draft_mode: bool
+    llm_enabled: bool
     state_db_path: Path = Path("data/state.db")
 
 
@@ -84,10 +85,12 @@ def load_settings(environ: dict[str, str] | None = None) -> AppSettings:
         else None
     )
     state_db_path = Path(env.get("AI_DIGEST_STATE_DB", "data/state.db"))
+    llm_enabled = bool(ark_api_key and ark_base_url and ark_model)
     return AppSettings(
         wechat=wechat,
         ark=ark,
         dry_run=dry_run,
         draft_mode=draft_mode,
+        llm_enabled=llm_enabled,
         state_db_path=state_db_path,
     )

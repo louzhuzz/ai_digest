@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
+from .cluster_tagger import ClusterTagger
+from .models import EventCluster
 from .pipeline import DigestPipeline, DigestRunResult
 
 
@@ -14,6 +16,7 @@ class DigestJobOutcome:
     items_count: int
     publisher_draft_id: str | None
     markdown: str | None
+    clusters: list[EventCluster] | None = None
 
 
 class DigestJobRunner:
@@ -27,6 +30,7 @@ class DigestJobRunner:
         dry_run: bool = True,
         alert_callback: Callable[[str], None] | None = None,
         min_items: int = 3,
+        cluster_tagger: ClusterTagger | None = None,
     ) -> None:
         self.collector_factory = collector_factory
         self.publisher = publisher
@@ -35,6 +39,7 @@ class DigestJobRunner:
         self.dry_run = dry_run
         self.alert_callback = alert_callback
         self.min_items = min_items
+        self.cluster_tagger = cluster_tagger
 
     def run(self, now: datetime | None = None) -> DigestJobOutcome:
         try:
@@ -45,6 +50,7 @@ class DigestJobRunner:
                 deduper=self.deduper,
                 dry_run=self.dry_run,
                 min_items=self.min_items,
+                cluster_tagger=self.cluster_tagger,
             )
             result = pipeline.run(now=now)
             return self._from_pipeline_result(result)
@@ -58,6 +64,7 @@ class DigestJobRunner:
                 items_count=0,
                 publisher_draft_id=None,
                 markdown=None,
+                clusters=None,
             )
 
     def _from_pipeline_result(self, result: DigestRunResult) -> DigestJobOutcome:
@@ -67,4 +74,5 @@ class DigestJobRunner:
             items_count=result.items_count,
             publisher_draft_id=result.publisher_draft_id,
             markdown=result.markdown,
+            clusters=result.clusters,
         )

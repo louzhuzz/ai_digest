@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from .cluster_tagger import ClusterTagger
 from .composition import DigestComposer
 from .dedupe import RecentDedupeFilter
 from .article_linter import ArticleLinter
-from .cluster_tagger import ClusterTagger
 from .event_clusterer import EventClusterer
-from .models import DigestItem
+from .models import DigestItem, EventCluster
 from .ranking import ItemRanker
 from .section_picker import SectionPicker
 from .summarizer import DigestPayloadBuilder, RuleBasedSummarizer
@@ -23,6 +23,7 @@ class DigestRunResult:
     publisher_draft_id: str | None
     markdown: str | None
     items: list[DigestItem]
+    clusters: list[EventCluster] | None = None
 
 
 class DigestPipeline:
@@ -55,6 +56,7 @@ class DigestPipeline:
         self.cluster_tagger = cluster_tagger
         self.dry_run = dry_run
         self.min_items = min_items
+        self._clusters: list[EventCluster] | None = None
 
     def run(self, now: datetime | None = None) -> DigestRunResult:
         current_time = now or datetime.now(timezone.utc)
@@ -71,7 +73,7 @@ class DigestPipeline:
                 publisher_draft_id=None,
                 markdown=None,
                 items=summarized,
-        )
+            )
 
         quota_items = self.section_picker.apply_source_quota(summarized)
         if len(quota_items) < self.min_items:
@@ -84,26 +86,16 @@ class DigestPipeline:
                 items=quota_items,
             )
 
+        self._clusters = self.clusterer.cluster(quota_items)
         payload = self.payload_builder.build(quota_items, date=current_time.date().isoformat())
-        if self.dry_run:
-            markdown = self.composer.compose(quota_items, date=str(payload["date"]))
-        else:
-            if self.writer is None:
-                return DigestRunResult(
-                    status="failed",
-                    reason="ARK writer is required for publish mode",
-                    items_count=len(summarized),
-                    publisher_draft_id=None,
-                    markdown=None,
-                    items=summarized,
-                )
-            clusters = self.clusterer.cluster(quota_items)
+
+        if self.writer is not None:
             if self.cluster_tagger is not None:
-                clusters = self.cluster_tagger.tag_clusters(clusters)
+                self._clusters = self.cluster_tagger.tag_clusters(self._clusters)
             article_input = self.payload_builder.build_article_input(
                 quota_items,
                 date=str(payload["date"]),
-                clusters=clusters,
+                clusters=self._clusters,
             )
             markdown = self.writer.write(article_input)
             try:
@@ -116,7 +108,11 @@ class DigestPipeline:
                     publisher_draft_id=None,
                     markdown=None,
                     items=quota_items,
+                    clusters=self._clusters,
                 )
+        else:
+            markdown = self.composer.compose(quota_items, date=str(payload["date"]))
+
         draft_id = None
         if self.publisher is not None:
             draft_id = self.publisher.publish(markdown)
@@ -130,6 +126,7 @@ class DigestPipeline:
                 publisher_draft_id=draft_id,
                 markdown=markdown,
                 items=quota_items,
+                clusters=self._clusters,
             )
 
         return DigestRunResult(
@@ -139,4 +136,5 @@ class DigestPipeline:
             publisher_draft_id=draft_id,
             markdown=markdown,
             items=quota_items,
+            clusters=self._clusters,
         )

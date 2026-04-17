@@ -49,6 +49,7 @@ class DigestJobRunnerTest(unittest.TestCase):
                     'items_count': 0,
                     'publisher_draft_id': None,
                     'markdown': None,
+                    'clusters': None,
                 })()
 
         deduper = object()
@@ -96,17 +97,21 @@ class DigestJobRunnerTest(unittest.TestCase):
                     ),
                 ]
 
+        class FakePublisher:
+            def publish(self, markdown):
+                return "draft_123"
+
         runner = DigestJobRunner(
             collector_factory=lambda: Collector(),
-            publisher=object(),
+            publisher=FakePublisher(),
             writer=None,
             dry_run=False,
         )
 
         result = runner.run()
 
-        self.assertEqual(result.status, "failed")
-        self.assertIn("ARK", result.error or "")
+        self.assertEqual(result.status, "published")
+        self.assertIsNotNone(result.markdown)
 
 
 if __name__ == "__main__":
