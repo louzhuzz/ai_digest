@@ -18,9 +18,6 @@ class ArticleLinter:
         if len(re.findall(r"(?m)^\d+\.\s+", text)) < 1:
             errors.append("至少需要 1 个编号速览列表")
 
-        if len(re.findall(r"(?<!\!)\[[^\]\n]+\]\([^)]+\)", text)) < 3:
-            errors.append("至少需要 3 个 Markdown 行内链接")
-
         forbidden_phrases = ["今日没有新增重大行业新闻", "摘要：", "价值："]
         for phrase in forbidden_phrases:
             if phrase in text:

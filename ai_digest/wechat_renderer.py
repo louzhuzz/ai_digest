@@ -5,6 +5,7 @@ import html
 import re
 
 LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
 ORDERED_LIST_PATTERN = re.compile(r"\d+\.\s+(.*)")
 
@@ -13,6 +14,7 @@ H1_STYLE = 'font-size:20px; font-weight:bold; color:#1a1a1a; margin:1.2em 0 0.6e
 H2_STYLE = 'margin:1.4em 0 0.55em; font-size:22px; font-weight:700; line-height:1.45; color:#1f2937;'
 H3_STYLE = 'margin:1em 0 0.45em; font-size:18px; font-weight:700; line-height:1.5; color:#334155;'
 LINK_STYLE = 'color:#1a73e8; text-decoration:underline;'
+IMAGE_STYLE = 'max-width:100%; height:auto; margin:1em 0; display:block;'
 
 
 def _render_inline(text: str) -> str:
@@ -28,6 +30,16 @@ def _render_inline(text: str) -> str:
     return BOLD_PATTERN.sub(lambda match: f"<strong>{html.escape(match.group(1))}</strong>", rendered)
 
 
+def _render_image_line(line: str) -> str:
+    """Convert markdown image syntax ![alt](url) to <img src="url"/>"""
+    match = IMAGE_PATTERN.search(line)
+    if not match:
+        return ""
+    alt, url = match.groups()
+    escaped_url = html.escape(url, quote=True)
+    return f'<p><img src="{escaped_url}" alt="{html.escape(alt)}" style="{IMAGE_STYLE}"/></p>'
+
+
 def render_wechat_html(markdown: str) -> str:
     parts: list[str] = []
     in_unordered_list = False
@@ -38,6 +50,16 @@ def render_wechat_html(markdown: str) -> str:
             if in_unordered_list:
                 parts.append("</ul>")
                 in_unordered_list = False
+            continue
+
+        # 图片行：整行只有一个 ![...](url)，直接转 img
+        if line.startswith("![](") or IMAGE_PATTERN.match(line.strip()):
+            if in_unordered_list:
+                parts.append("</ul>")
+                in_unordered_list = False
+            img_html = _render_image_line(line.strip())
+            if img_html:
+                parts.append(img_html)
             continue
 
         if line.startswith("# "):

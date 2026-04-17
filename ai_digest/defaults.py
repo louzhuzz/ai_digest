@@ -9,6 +9,7 @@ from .collectors.github import GitHubTrendingCollector
 from .collectors.hn import HNFrontPageCollector
 from .collectors.huggingface import HFTrendingCollector
 from .collectors.web_news import WebNewsIndexCollector
+from .collectors.rss import RSSCollector
 from .cluster_tagger import ClusterTagger
 from .llm_writer import ARKArticleWriter
 from .wechat_image_uploader import WeChatImageUploader
@@ -61,6 +62,15 @@ class BoundHFTrendingCollector(BoundCollector):
 
 class BoundWebNewsCollector(BoundCollector):
     def __init__(self, collector: WebNewsIndexCollector, page_url: str) -> None:
+        self.collector = collector
+        self.page_url = page_url
+
+    def collect(self) -> list:
+        return self.collector.collect(self.page_url)
+
+
+class BoundRSSCollector(BoundCollector):
+    def __init__(self, collector: RSSCollector, page_url: str) -> None:
         self.collector = collector
         self.page_url = page_url
 
@@ -157,6 +167,12 @@ def build_default_source_specs() -> list[SourceSpec]:
             category="news",
             allowed_path_prefixes=("/article/details/", "/p/", "/news/", "/article/"),
         ),
+        SourceSpec(
+            name="大黑AI速报",
+            url="https://news.daheyai.com/rss.php",
+            kind="rss",
+            category="news",
+        ),
     ]
 
 
@@ -181,14 +197,14 @@ def build_default_collector() -> CompositeCollector:
                     source.url,
                 )
             )
-        else:  # pragma: no cover - defensive for future source kinds
-            raise ValueError(f"Unsupported source kind: {source.kind}")
+        elif source.kind == "rss":
+            collectors.append(BoundRSSCollector(RSSCollector(source.name), source.url))
 
     return CompositeCollector(collectors)
 
 
 def build_default_publisher(settings: AppSettings | None = None) -> WeChatDraftPublisher:
-    if settings and settings.wechat and not settings.dry_run:
+    if settings and settings.wechat:
         token_client = WeChatAccessTokenClient(
             appid=settings.wechat.appid,
             appsecret=settings.wechat.appsecret,
@@ -198,7 +214,7 @@ def build_default_publisher(settings: AppSettings | None = None) -> WeChatDraftP
         return WeChatDraftPublisher(
             access_token=access_token,
             cover_media_id=settings.wechat.thumb_media_id,
-            dry_run=False,
+            dry_run=settings.dry_run,
             image_uploader=image_uploader,
         )
 

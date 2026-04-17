@@ -46,3 +46,16 @@ class WeChatRendererTest(unittest.TestCase):
         assert "<a href=" in html
         assert "color:#1a73e8" in html
         assert "链接文字" in html
+
+    def test_renders_image_as_img_tag(self):
+        html = render_wechat_html("![封面图](https://example.com/image.jpg)")
+        assert "<img src=" in html
+        assert "https://example.com/image.jpg" in html
+        assert "max-width:100%" in html
+        assert "display:block" in html
+        assert "封面图" in html
+
+    def test_renders_image_with_empty_alt(self):
+        html = render_wechat_html("![](https://example.com/img.png)")
+        assert "<img src=" in html
+        assert "https://example.com/img.png" in html

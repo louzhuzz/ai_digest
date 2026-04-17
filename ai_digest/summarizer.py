@@ -69,6 +69,7 @@ class DigestPayloadBuilder:
         payload["summary"] = summary
         if len(summary) > 400:
             payload["summary"] = summary[:397] + "..."
+        payload["avatar_url"] = item.metadata.get("avatar_url", "")
         return payload
 
     def _serialize_cluster(self, cluster: EventCluster) -> dict[str, object]:

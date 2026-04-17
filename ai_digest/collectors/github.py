@@ -10,6 +10,7 @@ from ..models import DigestItem
 
 ARTICLE_PATTERN = re.compile(r"<article\b[^>]*class=\"[^\"]*Box-row[^\"]*\"[^>]*>(.*?)</article>", re.S)
 REPO_LINK_PATTERN = re.compile(r"<h2\b[^>]*>.*?<a\b[^>]*\shref=\"(/[^\"?#]+/[^\"?#]+)\"[^>]*>(.*?)</a>", re.S)
+AVATAR_BASE = "https://avatars.githubusercontent.com/u/"
 STARS_PATTERN = re.compile(r"([0-9][0-9,]*)\s+stars?\s+today", re.I)
 DESCRIPTION_PATTERN = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
 STAR_NOISE_PATTERN = re.compile(r"^Star\s+[^ ]+\s*/\s*[^ ]+\s+", re.I)
@@ -95,6 +96,8 @@ class GitHubTrendingCollector:
             stars_match = STARS_PATTERN.search(article)
             stars_growth = int(stars_match.group(1).replace(",", "")) if stars_match else 0
             owner_repo = href.strip("/")
+            owner = owner_repo.split("/")[0]
+            avatar_url = f"{AVATAR_BASE}{owner}?s=40&v=4"
             items.append(
                 DigestItem(
                     title=title,
@@ -104,7 +107,7 @@ class GitHubTrendingCollector:
                     category=self.category,
                     summary=description,
                     dedupe_key=f"github:{owner_repo}",
-                    metadata={"stars_growth": stars_growth, "page_url": page_url},
+                    metadata={"stars_growth": stars_growth, "page_url": page_url, "avatar_url": avatar_url},
                 )
             )
         return items

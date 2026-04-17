@@ -25,6 +25,7 @@ class DefaultSourceSpecsTest(unittest.TestCase):
                 "新智元",
                 "量子位",
                 "CSDN AI",
+                "大黑AI速报",
             ],
         )
         self.assertEqual(specs[0].url, "https://github.com/trending")
@@ -39,6 +40,7 @@ class DefaultSourceSpecsTest(unittest.TestCase):
             ark=None,
             dry_run=True,
             draft_mode=False,
+            llm_enabled=False,
             state_db_path=Path('/tmp/openclaw-state.db'),
         )
 
@@ -65,7 +67,7 @@ class DefaultSourceSpecsTest(unittest.TestCase):
         collector = build_default_collector()
 
         items = collector.collectors
-        self.assertEqual(len(items), 10)
+        self.assertEqual(len(items), 11)
 
     def test_composite_collector_continues_when_one_source_fails(self) -> None:
         class GoodCollector:

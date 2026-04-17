@@ -20,6 +20,11 @@ class ItemRanker:
         community_heat = min(float(item.metadata.get("community_heat", 0) or 0) / 200.0, 1.0)
         source_strength = float(item.metadata.get("source_strength", 0) or 0)
         developer_relevance = float(item.metadata.get("developer_relevance", 0) or 0)
+        source_boost = float(item.metadata.get("source_boost", 0) or 0)
+
+        # 大黑AI速报权重提升
+        if item.source == "大黑AI速报":
+            source_boost = max(source_boost, 0.15)
 
         if item.category in {"project", "github"}:
             return round(
@@ -34,6 +39,7 @@ class ItemRanker:
             (0.35 * freshness)
             + (0.25 * community_heat)
             + (0.20 * source_strength)
-            + (0.20 * developer_relevance),
+            + (0.20 * developer_relevance)
+            + source_boost,
             4,
         )

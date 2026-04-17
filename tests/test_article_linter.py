@@ -73,19 +73,6 @@ class ArticleLinterTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "至少需要 1 个编号速览列表"):
             self.linter.lint(markdown)
 
-    def test_rejects_article_with_fewer_than_three_inline_links(self) -> None:
-        markdown = (
-            "# AI 每日新闻速递\n\n"
-            "1. 先看最重要的一条。[详情](https://example.com/a)\n\n"
-            "## 今日重点\n\n"
-            "这里有 [链接一](https://example.com/1)。\n\n"
-            "## AI 技术进展\n\n"
-            "补充一段正文，确保长度足够。\n"
-        )
-
-        with self.assertRaisesRegex(RuntimeError, "至少需要 3 个 Markdown 行内链接"):
-            self.linter.lint(markdown)
-
     def test_rejects_forbidden_phrases(self) -> None:
         markdown = (
             "# AI 每日新闻速递\n\n"

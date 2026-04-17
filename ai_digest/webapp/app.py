@@ -61,26 +61,36 @@ def create_app(
             dry_run=True,
             draft_mode=False,
             state_db_path=settings.state_db_path,
+            llm_enabled=settings.llm_enabled,
         )
         runner = runner_factory(preview_settings)
         result = runner.run()
         if result.markdown:
             storage.write_markdown(result.markdown)
-            storage.write_html(markdown_to_html(result.markdown))
+            # 用 publisher 触发图片上传，预览所见 = 草稿箱所见
+            title = _extract_title(result.markdown)
+            publisher = publisher_factory(preview_settings)
+            publisher.publish(result.markdown, title=title)
+            html_content = publisher.last_payload["articles"][0]["content"]
+            storage.write_html(html_content)
         # 写 fact-card 数据
         from collections import Counter
-        items = getattr(result, "items", []) or []
-        source_dist = dict(Counter(item.source for item in items))
+
+        clusters = result.clusters or []
+        source_dist: dict[str, int] = {}
+        for cluster in clusters:
+            for source in cluster.sources:
+                source_dist[source] = source_dist.get(source, 0) + 1
         run_data = {
             "clusters": [
                 {
-                    "topic_tag": getattr(item, "topic_tag", ""),
-                    "sources": [item.source],
-                    "canonical_title": item.title,
+                    "topic_tag": cluster.topic_tag,
+                    "sources": list(cluster.sources),
+                    "canonical_title": cluster.canonical_title,
                 }
-                for item in items
+                for cluster in clusters
             ],
-            "total_items": len(items),
+            "total_items": result.items_count,
             "source_distribution": source_dist,
             "high_signal_dropped": [],
         }
