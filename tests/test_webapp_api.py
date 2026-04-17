@@ -23,6 +23,7 @@ class FakeResult:
         self.items_count = 3
         self.publisher_draft_id = None
         self.markdown = "# AI 每日新闻速递\n\n## 今日重点\n\nA"
+        self.clusters = None
 
 
 class FakeRunner:
@@ -71,6 +72,7 @@ def _fake_publish_enabled_settings() -> AppSettings:
         ark=None,
         dry_run=False,
         draft_mode=True,
+        llm_enabled=False,
         state_db_path=Path("data/state.db"),
     )
 
