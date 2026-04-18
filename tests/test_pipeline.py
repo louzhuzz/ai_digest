@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from ai_digest.dedupe import RecentDedupeFilter
 from ai_digest.models import DigestItem
+from ai_digest.outline_generator import Outline, SectionSpec
 from ai_digest.pipeline import DigestPipeline
 
 
@@ -33,6 +34,26 @@ class FakeWriter:
     def write(self, article_input: dict[str, object]) -> str:
         self.calls.append(article_input)
         return self.markdown
+
+
+class TwoPhaseWriter(FakeWriter):
+    def __init__(self, markdown: str = "# 两阶段标题\n\n1. 结论\n\n[链接A](https://example.com/a)\n[链接B](https://example.com/b)\n[链接C](https://example.com/c)\n") -> None:
+        super().__init__(markdown=markdown)
+        self.render_calls: list[tuple[Outline, dict[str, object]]] = []
+
+    def render(self, outline: Outline, article_input: dict[str, object]) -> str:
+        self.render_calls.append((outline, article_input))
+        return self.markdown
+
+
+class FakeOutlineGenerator:
+    def __init__(self, outline: Outline | None) -> None:
+        self.outline = outline
+        self.calls: list[dict[str, object]] = []
+
+    def generate(self, article_input: dict[str, object]) -> Outline | None:
+        self.calls.append(article_input)
+        return self.outline
 
 
 class FakeStateStore:
@@ -86,36 +107,72 @@ class NoOpLinter:
 
 
 class DigestPipelineTest(unittest.TestCase):
-    def test_skips_publish_when_candidates_are_insufficient(self) -> None:
+    def test_publish_mode_uses_outline_generator_when_available(self) -> None:
+        writer = TwoPhaseWriter()
+        outline = Outline(
+            title="两阶段标题",
+            lede="今天重点看模型和项目。",
+            sections=[SectionSpec(heading="今日重点", key_points=["OpenAI 更新"], source_hints=["OpenAI News"])],
+        )
+        outline_generator = FakeOutlineGenerator(outline)
         state_store = FakeStateStore()
         pipeline = DigestPipeline(
             collector=FakeCollector(
                 [
                     DigestItem(
-                        title="Only item",
-                        url="https://example.com/only",
+                        title="Hot repo",
+                        url="https://github.com/example/hot",
+                        source="GitHub",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="github",
+                        score=0.91,
+                        dedupe_key="github:example/hot",
+                    ),
+                    DigestItem(
+                        title="AI update",
+                        url="https://example.com/update",
                         source="OpenAI Blog",
                         published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
                         category="news",
-                        score=0.8,
-                        dedupe_key="only-item",
-                    )
+                        score=0.82,
+                        dedupe_key="news:update",
+                    ),
+                    DigestItem(
+                        title="Tool release",
+                        url="https://example.com/tool",
+                        source="Tool Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="tool",
+                        score=0.81,
+                        dedupe_key="tool:release",
+                    ),
                 ]
             ),
-            publisher=FakePublisher(),
+            publisher=None,
+            article_linter=NoOpLinter(),
             deduper=RecentDedupeFilter(state_store=state_store),
+            dry_run=False,
+            writer=writer,
+            outline_generator=outline_generator,
             min_items=3,
         )
 
         result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
 
-        self.assertEqual(result.status, "skipped")
-        self.assertEqual(result.reason, "候选池不足")
-        self.assertEqual(result.items_count, 1)
-        self.assertEqual(result.publisher_draft_id, None)
-        self.assertEqual(state_store.upserted_items, [])
+        self.assertEqual(result.status, "composed")
+        self.assertEqual(len(outline_generator.calls), 1)
+        self.assertIn("briefing_angle", outline_generator.calls[0])
+        self.assertIn("lead_items", outline_generator.calls[0])
+        self.assertIn("secondary_items", outline_generator.calls[0])
+        self.assertEqual(len(writer.render_calls), 1)
+        self.assertIn("briefing_angle", writer.render_calls[0][1])
+        self.assertIn("lead_items", writer.render_calls[0][1])
+        self.assertIn("secondary_items", writer.render_calls[0][1])
+        self.assertEqual(len(writer.calls), 0)
 
-    def test_composes_and_publishes_when_candidates_are_sufficient(self) -> None:
+    def test_dry_run_with_writer_stays_on_compose_path(self) -> None:
+        writer = TwoPhaseWriter()
+        linter = RecordingLinter()
         publisher = FakePublisher()
         state_store = FakeStateStore()
         pipeline = DigestPipeline(
@@ -151,7 +208,197 @@ class DigestPipelineTest(unittest.TestCase):
                 ]
             ),
             publisher=publisher,
+            article_linter=linter,
             deduper=RecentDedupeFilter(state_store=state_store),
+            dry_run=True,
+            writer=writer,
+            outline_generator=FakeOutlineGenerator(Outline(
+                title="不应触发",
+                lede="不应触发",
+                sections=[],
+            )),
+            min_items=3,
+        )
+
+        result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
+
+        self.assertEqual(result.status, "composed")
+        self.assertEqual(writer.calls, [])
+        self.assertEqual(writer.render_calls, [])
+        self.assertEqual(linter.calls, [])
+        self.assertEqual(publisher.calls, [])
+
+    def test_dry_run_applies_cluster_tagger_before_returning_clusters(self) -> None:
+        from unittest.mock import MagicMock
+        from ai_digest.cluster_tagger import ClusterTagger
+        from ai_digest.models import EventCluster
+
+        item = DigestItem(
+            title="OpenAI GPT-5",
+            url="https://example.com/openai-gpt5",
+            source="OpenAI News",
+            published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+            category="news",
+            score=0.93,
+            dedupe_key="news:openai-gpt5",
+        )
+        mock_collector = MagicMock()
+        mock_collector.collect.return_value = [item]
+        mock_cluster_tagger = MagicMock(spec=ClusterTagger)
+        mock_cluster_tagger.tag_clusters.return_value = [
+            EventCluster(
+                canonical_title="OpenAI GPT-5",
+                canonical_url="https://example.com/openai-gpt5",
+                sources=["OpenAI News"],
+                items=[item],
+                score=0.93,
+                category="event",
+                topic_tag="模型发布",
+            )
+        ]
+        state_store = FakeStateStore()
+        pipeline = DigestPipeline(
+            collector=mock_collector,
+            publisher=None,
+            article_linter=NoOpLinter(),
+            deduper=RecentDedupeFilter(state_store=state_store),
+            dry_run=True,
+            writer=None,
+            cluster_tagger=mock_cluster_tagger,
+            min_items=1,
+        )
+
+        result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
+
+        self.assertEqual(result.status, "composed")
+        mock_cluster_tagger.tag_clusters.assert_called_once()
+        self.assertIsNotNone(result.clusters)
+        self.assertEqual(result.clusters[0].topic_tag, "模型发布")
+
+    def test_publish_mode_falls_back_to_single_phase_when_outline_missing(self) -> None:
+        writer = FakeWriter()
+        outline_generator = FakeOutlineGenerator(None)
+        state_store = FakeStateStore()
+        pipeline = DigestPipeline(
+            collector=FakeCollector(
+                [
+                    DigestItem(
+                        title="Hot repo",
+                        url="https://github.com/example/hot",
+                        source="GitHub",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="github",
+                        score=0.91,
+                        dedupe_key="github:example/hot",
+                    ),
+                    DigestItem(
+                        title="AI update",
+                        url="https://example.com/update",
+                        source="OpenAI Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="news",
+                        score=0.82,
+                        dedupe_key="news:update",
+                    ),
+                    DigestItem(
+                        title="Tool release",
+                        url="https://example.com/tool",
+                        source="Tool Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="tool",
+                        score=0.81,
+                        dedupe_key="tool:release",
+                    ),
+                ]
+            ),
+            publisher=None,
+            article_linter=NoOpLinter(),
+            deduper=RecentDedupeFilter(state_store=state_store),
+            dry_run=False,
+            writer=writer,
+            outline_generator=outline_generator,
+            min_items=3,
+        )
+
+        result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
+
+        self.assertEqual(result.status, "composed")
+        self.assertEqual(len(outline_generator.calls), 1)
+        self.assertEqual(len(writer.calls), 1)
+        self.assertIn("briefing_angle", writer.calls[0])
+        self.assertIn("lead_items", writer.calls[0])
+        self.assertIn("secondary_items", writer.calls[0])
+
+    def test_skips_publish_when_candidates_are_insufficient(self) -> None:
+        state_store = FakeStateStore()
+        pipeline = DigestPipeline(
+            collector=FakeCollector(
+                [
+                    DigestItem(
+                        title="Only item",
+                        url="https://example.com/only",
+                        source="OpenAI Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="news",
+                        score=0.8,
+                        dedupe_key="only-item",
+                    )
+                ]
+            ),
+            publisher=FakePublisher(),
+            deduper=RecentDedupeFilter(state_store=state_store),
+            min_items=3,
+        )
+
+        result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
+
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.reason, "候选池不足")
+        self.assertEqual(result.items_count, 1)
+        self.assertEqual(result.publisher_draft_id, None)
+        self.assertEqual(state_store.upserted_items, [])
+
+    def test_composes_and_publishes_when_candidates_are_sufficient(self) -> None:
+        publisher = FakePublisher()
+        writer = FakeWriter()
+        state_store = FakeStateStore()
+        pipeline = DigestPipeline(
+            collector=FakeCollector(
+                [
+                    DigestItem(
+                        title="Hot repo",
+                        url="https://github.com/example/hot",
+                        source="GitHub",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="github",
+                        score=0.91,
+                        dedupe_key="github:example/hot",
+                    ),
+                    DigestItem(
+                        title="AI update",
+                        url="https://example.com/update",
+                        source="OpenAI Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="news",
+                        score=0.82,
+                        dedupe_key="news:update",
+                    ),
+                    DigestItem(
+                        title="Tool release",
+                        url="https://example.com/tool",
+                        source="Tool Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="tool",
+                        score=0.81,
+                        dedupe_key="tool:release",
+                    ),
+                ]
+            ),
+            publisher=publisher,
+            deduper=RecentDedupeFilter(state_store=state_store),
+            writer=writer,
+            article_linter=NoOpLinter(),
+            dry_run=False,
             min_items=3,
         )
 
@@ -160,8 +407,8 @@ class DigestPipelineTest(unittest.TestCase):
         self.assertEqual(result.status, "published")
         self.assertEqual(result.publisher_draft_id, "draft-123")
         self.assertEqual(len(publisher.calls), 1)
-        self.assertIn("# AI 每日新闻速递", publisher.calls[0])
-        self.assertIn("[Hot repo](https://github.com/example/hot)", publisher.calls[0])
+        self.assertEqual(publisher.calls[0], writer.markdown)
+        self.assertEqual(len(writer.calls), 1)
         self.assertEqual(len(state_store.upserted_items), 3)
         self.assertEqual(
             {item["dedupe_key"] for item in state_store.upserted_items},
@@ -378,6 +625,7 @@ class DigestPipelineTest(unittest.TestCase):
         self.assertEqual(state_store.upserted_items, [])
 
     def test_publish_mode_fails_when_ark_writer_is_missing(self) -> None:
+        publisher = FakePublisher()
         state_store = FakeStateStore()
         pipeline = DigestPipeline(
             collector=FakeCollector(
@@ -411,7 +659,7 @@ class DigestPipelineTest(unittest.TestCase):
                     ),
                 ]
             ),
-            publisher=FakePublisher(),
+            publisher=publisher,
             deduper=RecentDedupeFilter(state_store=state_store),
             dry_run=False,
             writer=None,
@@ -420,8 +668,59 @@ class DigestPipelineTest(unittest.TestCase):
 
         result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
 
-        self.assertEqual(result.status, "published")
-        self.assertIsNotNone(result.markdown)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason, "writer is required for publish mode")
+        self.assertIsNone(result.markdown)
+        self.assertEqual(result.publisher_draft_id, None)
+        self.assertEqual(publisher.calls, [])
+
+    def test_dry_run_does_not_publish_even_when_publisher_exists(self) -> None:
+        publisher = FakePublisher()
+        state_store = FakeStateStore()
+        pipeline = DigestPipeline(
+            collector=FakeCollector(
+                [
+                    DigestItem(
+                        title="Hot repo",
+                        url="https://github.com/example/hot",
+                        source="GitHub",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="github",
+                        score=0.91,
+                        dedupe_key="github:example/hot",
+                    ),
+                    DigestItem(
+                        title="AI update",
+                        url="https://example.com/update",
+                        source="OpenAI Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="news",
+                        score=0.82,
+                        dedupe_key="news:update",
+                    ),
+                    DigestItem(
+                        title="Tool release",
+                        url="https://example.com/tool",
+                        source="Tool Blog",
+                        published_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+                        category="tool",
+                        score=0.81,
+                        dedupe_key="tool:release",
+                    ),
+                ]
+            ),
+            publisher=publisher,
+            deduper=RecentDedupeFilter(state_store=state_store),
+            dry_run=True,
+            writer=FakeWriter(),
+            min_items=3,
+        )
+
+        result = pipeline.run(now=datetime(2026, 4, 10, tzinfo=timezone.utc))
+
+        self.assertEqual(result.status, "composed")
+        self.assertIsNone(result.publisher_draft_id)
+        self.assertEqual(publisher.calls, [])
 
     def test_publish_mode_builds_clustered_article_input(self) -> None:
         writer = FakeWriter()
@@ -485,11 +784,16 @@ class DigestPipelineTest(unittest.TestCase):
         self.assertEqual(result.status, "published")
         self.assertEqual(len(writer.calls), 1)
         self.assertEqual(len(linter.calls), 1)
-        self.assertIn("top_event_clusters", writer.calls[0])
-        self.assertIn("top_project_clusters", writer.calls[0])
-        self.assertNotIn("news_signals", writer.calls[0])
-        self.assertEqual(len(writer.calls[0]["top_event_clusters"][0]["items"]), 2)
-        self.assertEqual(writer.calls[0]["top_event_clusters"][0]["sources"], ["Hacker News AI", "OpenAI News"])
+        self.assertIn("briefing_angle", writer.calls[0])
+        self.assertIn("lead_items", writer.calls[0])
+        self.assertIn("secondary_items", writer.calls[0])
+        self.assertEqual(len(writer.calls[0]["lead_items"]), 2)
+        self.assertEqual(len(writer.calls[0]["secondary_items"]), 2)
+        all_sources = {
+            item["source"]
+            for item in writer.calls[0]["lead_items"] + writer.calls[0]["secondary_items"]
+        }
+        self.assertEqual(all_sources, {"Hacker News AI", "OpenAI News", "GitHub Trending", "Tool Blog"})
         self.assertEqual(len(state_store.upserted_items), 4)
 
     def test_dry_run_does_not_force_article_lint(self) -> None:
@@ -587,8 +891,7 @@ class DigestPipelineTest(unittest.TestCase):
         payload = writer.calls[0]
         clustered_sources = [
             item["source"]
-            for cluster in payload["top_event_clusters"]
-            for item in cluster["items"]
+            for item in payload["lead_items"] + payload["secondary_items"]
         ]
         self.assertLessEqual(clustered_sources.count("量子位"), 2)
         self.assertEqual(len(state_store.upserted_items), len(result.items))

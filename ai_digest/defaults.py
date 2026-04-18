@@ -12,6 +12,7 @@ from .collectors.web_news import WebNewsIndexCollector
 from .collectors.rss import RSSCollector
 from .cluster_tagger import ClusterTagger
 from .llm_writer import ARKArticleWriter
+from .outline_generator import OutlineGenerator
 from .wechat_image_uploader import WeChatImageUploader
 from .publishers.wechat import WeChatDraftPublisher
 from .state_store import SqliteStateStore
@@ -205,6 +206,11 @@ def build_default_collector() -> CompositeCollector:
 
 def build_default_publisher(settings: AppSettings | None = None) -> WeChatDraftPublisher:
     if settings and settings.wechat:
+        if settings.dry_run:
+            return WeChatDraftPublisher(
+                cover_media_id=settings.wechat.thumb_media_id,
+                dry_run=True,
+            )
         token_client = WeChatAccessTokenClient(
             appid=settings.wechat.appid,
             appsecret=settings.wechat.appsecret,
@@ -219,6 +225,17 @@ def build_default_publisher(settings: AppSettings | None = None) -> WeChatDraftP
         )
 
     return WeChatDraftPublisher(dry_run=True)
+
+
+def build_default_outline_generator(settings: AppSettings | None = None) -> OutlineGenerator | None:
+    if settings and settings.ark and settings.llm_enabled:
+        return OutlineGenerator(
+            api_key=settings.ark.api_key,
+            base_url=settings.ark.base_url,
+            model=settings.ark.model,
+            timeout_seconds=settings.ark.timeout_seconds,
+        )
+    return None
 
 
 def build_default_writer(settings: AppSettings | None = None) -> ARKArticleWriter | None:
@@ -253,6 +270,7 @@ def build_default_runner(
         collector_factory=build_default_collector,
         publisher=publisher or build_default_publisher(settings),
         writer=build_default_writer(settings),
+        outline_generator=build_default_outline_generator(settings),
         deduper=deduper,
         dry_run=settings.dry_run if settings is not None else True,
         min_items=3,

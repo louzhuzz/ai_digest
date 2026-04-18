@@ -67,12 +67,7 @@ def create_app(
         result = runner.run()
         if result.markdown:
             storage.write_markdown(result.markdown)
-            # 用 publisher 触发图片上传，预览所见 = 草稿箱所见
-            title = _extract_title(result.markdown)
-            publisher = publisher_factory(preview_settings)
-            publisher.publish(result.markdown, title=title)
-            html_content = publisher.last_payload["articles"][0]["content"]
-            storage.write_html(html_content)
+            storage.write_html(markdown_to_html(result.markdown))
         # 写 fact-card 数据
         from collections import Counter
 

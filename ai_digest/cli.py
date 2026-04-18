@@ -29,6 +29,7 @@ def main(argv: Sequence[str] | None = None, runner=None) -> int:
                 ark=settings.ark,
                 dry_run=True,
                 draft_mode=False,
+                llm_enabled=settings.llm_enabled,
                 state_db_path=settings.state_db_path,
             )
         elif args.publish and settings.wechat:
@@ -37,6 +38,7 @@ def main(argv: Sequence[str] | None = None, runner=None) -> int:
                 ark=settings.ark,
                 dry_run=False,
                 draft_mode=True,
+                llm_enabled=settings.llm_enabled,
                 state_db_path=settings.state_db_path,
             )
         runner = build_default_runner(settings=settings)

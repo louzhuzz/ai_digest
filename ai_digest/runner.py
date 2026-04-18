@@ -26,6 +26,7 @@ class DigestJobRunner:
         collector_factory: Callable[[], Any],
         publisher: Any | None = None,
         writer: Any | None = None,
+        outline_generator: Any | None = None,
         deduper: Any | None = None,
         dry_run: bool = True,
         alert_callback: Callable[[str], None] | None = None,
@@ -35,6 +36,7 @@ class DigestJobRunner:
         self.collector_factory = collector_factory
         self.publisher = publisher
         self.writer = writer
+        self.outline_generator = outline_generator
         self.deduper = deduper
         self.dry_run = dry_run
         self.alert_callback = alert_callback
@@ -47,6 +49,7 @@ class DigestJobRunner:
                 collector=self.collector_factory(),
                 publisher=self.publisher,
                 writer=self.writer,
+                outline_generator=self.outline_generator,
                 deduper=self.deduper,
                 dry_run=self.dry_run,
                 min_items=self.min_items,

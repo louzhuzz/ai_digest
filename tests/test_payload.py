@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from ai_digest.event_clusterer import EventClusterer
 from ai_digest.models import DigestItem
 from ai_digest.summarizer import DigestPayloadBuilder
+from ai_digest.section_picker import BriefingSelection
 
 
 class DigestPayloadBuilderTest(unittest.TestCase):
@@ -47,7 +48,23 @@ class DigestPayloadBuilderTest(unittest.TestCase):
 
         self.assertEqual(payload["items"][0]["summary"], "Description from metadata")
 
-    def test_build_article_input_groups_clusters_and_serializes_nested_datetime_fields(self) -> None:
+    def test_build_article_input_requires_briefing_selection(self) -> None:
+        item = DigestItem(
+            title="AI update",
+            url="https://example.com/update",
+            source="OpenAI Blog",
+            published_at=datetime(2026, 4, 10, 12, 30, tzinfo=timezone.utc),
+            category="news",
+            summary="New capability",
+            why_it_matters="Useful for developers",
+            score=0.9,
+            dedupe_key="news:update:a",
+        )
+
+        with self.assertRaisesRegex(ValueError, "briefing_selection is required for article input"):
+            DigestPayloadBuilder().build_article_input([item], date="2026-04-10")
+
+    def test_build_article_input_uses_briefing_selection_and_serializes_items(self) -> None:
         news_item_a = DigestItem(
             title="OpenAI launches new model",
             url="https://example.com/update",
@@ -56,6 +73,7 @@ class DigestPayloadBuilderTest(unittest.TestCase):
             category="news",
             summary="New capability",
             why_it_matters="Useful for developers",
+            metadata={"avatar_url": "https://img.example.com/openai.png"},
             score=0.9,
             dedupe_key="news:update:a",
         )
@@ -81,69 +99,85 @@ class DigestPayloadBuilderTest(unittest.TestCase):
             score=0.85,
             dedupe_key="github:example/agent",
         )
+        selection = BriefingSelection(
+            lead_items=[news_item_a, project_item],
+            secondary_items=[news_item_b],
+            briefing_angle="今天的主线偏产品更新与工程落地",
+        )
 
         payload = DigestPayloadBuilder().build_article_input(
             [news_item_a, news_item_b, project_item],
             date="2026-04-10",
+            briefing_selection=selection,
         )
 
         self.assertEqual(payload["signal_pool_size"], 3)
-        self.assertNotIn("news_signals", payload)
-        self.assertNotIn("project_signals", payload)
-        self.assertEqual(payload["top_event_clusters"][0]["canonical_title"], "OpenAI launches new model")
+        self.assertEqual(payload["briefing_angle"], "今天的主线偏产品更新与工程落地")
+        self.assertEqual(payload["lead_items"][0]["title"], "OpenAI launches new model")
+        self.assertEqual(payload["lead_items"][0]["avatar_url"], "https://img.example.com/openai.png")
         self.assertEqual(
-            payload["top_event_clusters"][0]["items"][0]["published_at"],
+            payload["lead_items"][0]["published_at"],
             "2026-04-10T12:30:00+00:00",
         )
         self.assertEqual(
-            payload["top_project_clusters"][0]["items"][0]["published_at"],
+            payload["lead_items"][1]["published_at"],
             "2026-04-10T11:00:00+00:00",
         )
         self.assertEqual(
-            payload["top_event_clusters"][0]["sources"],
-            ["Hacker News AI", "OpenAI News"],
+            payload["secondary_items"][0]["published_at"],
+            "2026-04-10T12:00:00+00:00",
         )
+        self.assertNotIn("top_event_clusters", payload)
+        self.assertNotIn("top_project_clusters", payload)
+        json.dumps(payload)
 
-    def test_build_article_input_accepts_precomputed_clusters(self) -> None:
-        item = DigestItem(
-            title="Archon",
-            url="https://github.com/example/archon",
-            source="GitHub Trending",
+    def test_build_article_input_respects_summary_boundary_at_220_and_221_chars(self) -> None:
+        item_220 = DigestItem(
+            title="Exact boundary",
+            url="https://example.com/exact",
+            source="OpenAI Blog",
             published_at=datetime(2026, 4, 10, 11, 0, tzinfo=timezone.utc),
-            category="github",
-            summary="Agent tooling",
+            category="news",
+            summary="x" * 220,
+            why_it_matters="Useful for developers",
+            score=0.86,
+            dedupe_key="news:exact-summary",
+        )
+        item_221 = DigestItem(
+            title="Over boundary",
+            url="https://example.com/over",
+            source="OpenAI Blog",
+            published_at=datetime(2026, 4, 10, 11, 0, tzinfo=timezone.utc),
+            category="news",
+            summary="x" * 221,
             why_it_matters="Useful for developers",
             score=0.85,
-            dedupe_key="github:example/archon",
+            dedupe_key="news:over-summary",
         )
-        clusters = EventClusterer().cluster([item])
 
-        payload = DigestPayloadBuilder().build_article_input(
-            [item],
+        payload_220 = DigestPayloadBuilder().build_article_input(
+            [item_220],
             date="2026-04-10",
-            clusters=clusters,
+            briefing_selection=BriefingSelection(
+                lead_items=[item_220],
+                secondary_items=[],
+                briefing_angle="简报主线",
+            ),
+        )
+        payload_221 = DigestPayloadBuilder().build_article_input(
+            [item_221],
+            date="2026-04-10",
+            briefing_selection=BriefingSelection(
+                lead_items=[item_221],
+                secondary_items=[],
+                briefing_angle="简报主线",
+            ),
         )
 
-        self.assertEqual(len(payload["top_project_clusters"]), 1)
-        self.assertEqual(payload["top_project_clusters"][0]["canonical_url"], "https://github.com/example/archon")
-
-    def test_serialize_cluster_includes_topic_tag(self) -> None:
-        from ai_digest.summarizer import DigestPayloadBuilder
-        from ai_digest.models import DigestItem, EventCluster
-        from datetime import datetime, timezone
-        item = DigestItem(
-            title="Test", url="https://x.com", source="X",
-            published_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
-            category="news", score=0.5, dedupe_key="x"
-        )
-        cluster = EventCluster(
-            canonical_title="Test", canonical_url="https://x.com",
-            sources=["X"], items=[item], score=0.5, category="event",
-            topic_tag="模型发布"
-        )
-        builder = DigestPayloadBuilder()
-        serialized = builder._serialize_cluster(cluster)
-        self.assertEqual(serialized["topic_tag"], "模型发布")
+        self.assertEqual(len(payload_220["lead_items"][0]["summary"]), 220)
+        self.assertNotIn("...", payload_220["lead_items"][0]["summary"])
+        self.assertEqual(len(payload_221["lead_items"][0]["summary"]), 220)
+        self.assertTrue(payload_221["lead_items"][0]["summary"].endswith("..."))
 
 
 if __name__ == "__main__":

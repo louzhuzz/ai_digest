@@ -110,8 +110,9 @@ class DigestJobRunnerTest(unittest.TestCase):
 
         result = runner.run()
 
-        self.assertEqual(result.status, "published")
-        self.assertIsNotNone(result.markdown)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error, "writer is required for publish mode")
+        self.assertIsNone(result.markdown)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ai_digest.defaults import CompositeCollector, build_default_collector, build_default_source_specs
+from ai_digest.defaults import (
+    CompositeCollector,
+    build_default_collector,
+    build_default_publisher,
+    build_default_source_specs,
+)
 from ai_digest.settings import AppSettings
 
 
@@ -94,6 +99,22 @@ class DefaultSourceSpecsTest(unittest.TestCase):
         self.assertEqual(items, ["a", "b"])
         self.assertEqual(len(collector.errors), 1)
         self.assertIn("source timeout", collector.errors[0])
+
+    def test_build_default_publisher_skips_access_token_lookup_in_dry_run(self) -> None:
+        settings = AppSettings(
+            wechat=MagicMock(appid="wx-appid", appsecret="wx-secret", thumb_media_id=""),
+            ark=None,
+            dry_run=True,
+            draft_mode=False,
+            llm_enabled=False,
+        )
+
+        with patch("ai_digest.defaults.WeChatAccessTokenClient") as token_cls:
+            publisher = build_default_publisher(settings)
+
+        token_cls.assert_not_called()
+        self.assertTrue(publisher.dry_run)
+        self.assertIsNone(publisher.image_uploader)
 
 
 if __name__ == "__main__":

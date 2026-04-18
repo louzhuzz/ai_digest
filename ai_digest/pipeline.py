@@ -32,6 +32,7 @@ class DigestPipeline:
         collector: Any,
         publisher: Any | None = None,
         writer: Any | None = None,
+        outline_generator: Any | None = None,
         *,
         deduper: RecentDedupeFilter | None = None,
         ranker: ItemRanker | None = None,
@@ -45,6 +46,7 @@ class DigestPipeline:
         self.collector = collector
         self.publisher = publisher
         self.writer = writer
+        self.outline_generator = outline_generator
         self.deduper = deduper or RecentDedupeFilter()
         self.ranker = ranker or ItemRanker()
         self.clusterer = EventClusterer()
@@ -87,17 +89,35 @@ class DigestPipeline:
             )
 
         self._clusters = self.clusterer.cluster(quota_items)
+        if self.cluster_tagger is not None:
+            self._clusters = self.cluster_tagger.tag_clusters(self._clusters)
         payload = self.payload_builder.build(quota_items, date=current_time.date().isoformat())
 
-        if self.writer is not None:
-            if self.cluster_tagger is not None:
-                self._clusters = self.cluster_tagger.tag_clusters(self._clusters)
+        if not self.dry_run and self.writer is None:
+            return DigestRunResult(
+                status="failed",
+                reason="writer is required for publish mode",
+                items_count=len(quota_items),
+                publisher_draft_id=None,
+                markdown=None,
+                items=quota_items,
+                clusters=self._clusters,
+            )
+
+        if self.writer is not None and not self.dry_run:
+            briefing_selection = self.section_picker.pick_briefing(quota_items)
             article_input = self.payload_builder.build_article_input(
                 quota_items,
                 date=str(payload["date"]),
-                clusters=self._clusters,
+                briefing_selection=briefing_selection,
             )
-            markdown = self.writer.write(article_input)
+            outline = None
+            if self.outline_generator is not None:
+                outline = self.outline_generator.generate(article_input)
+            if outline is not None and hasattr(self.writer, "render"):
+                markdown = self.writer.render(outline, article_input)
+            else:
+                markdown = self.writer.write(article_input)
             try:
                 self.article_linter.lint(markdown)
             except Exception as exc:
@@ -114,7 +134,7 @@ class DigestPipeline:
             markdown = self.composer.compose(quota_items, date=str(payload["date"]))
 
         draft_id = None
-        if self.publisher is not None:
+        if not self.dry_run and self.publisher is not None:
             draft_id = self.publisher.publish(markdown)
         try:
             self.deduper.persist(quota_items, now=current_time)

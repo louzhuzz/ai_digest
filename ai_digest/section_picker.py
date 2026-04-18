@@ -5,12 +5,23 @@ from dataclasses import dataclass
 
 from .models import DigestItem
 
+NEWS_TOOL_CATEGORIES = {"news", "tool"}
+PROJECT_CATEGORIES = {"github", "project"}
+BRIEFING_CATEGORIES = NEWS_TOOL_CATEGORIES | PROJECT_CATEGORIES
+
 
 @dataclass(frozen=True)
 class DigestSections:
     top_items: list[DigestItem]
     github_items: list[DigestItem]
     progress_items: list[DigestItem]
+
+
+@dataclass(frozen=True)
+class BriefingSelection:
+    lead_items: list[DigestItem]
+    secondary_items: list[DigestItem]
+    briefing_angle: str
 
 
 class SectionPicker:
@@ -31,12 +42,25 @@ class SectionPicker:
         ordered = self.apply_source_quota(items)
         used: set[str] = set()
         top_items = self._pick_top_items(ordered, used)
-        github_items = self._take(ordered, used, {"github"}, limit=self.github_limit)
-        progress_items = self._take(ordered, used, {"news", "tool"}, limit=self.progress_limit)
+        github_items = self._take(ordered, used, PROJECT_CATEGORIES, limit=self.github_limit)
+        progress_items = self._take(ordered, used, NEWS_TOOL_CATEGORIES, limit=self.progress_limit)
         return DigestSections(
             top_items=top_items,
             github_items=github_items,
             progress_items=progress_items,
+        )
+
+    def pick_briefing(self, items: list[DigestItem]) -> BriefingSelection:
+        ordered = self.apply_source_quota(items)
+        used: set[str] = set()
+
+        lead_items = self._pick_briefing_lead_items(ordered, used)
+        secondary_items = self._take(ordered, used, BRIEFING_CATEGORIES, limit=3)
+        briefing_angle = self._infer_briefing_angle(lead_items + secondary_items)
+        return BriefingSelection(
+            lead_items=lead_items,
+            secondary_items=secondary_items,
+            briefing_angle=briefing_angle,
         )
 
     def apply_source_quota(self, items: list[DigestItem]) -> list[DigestItem]:
@@ -53,15 +77,15 @@ class SectionPicker:
 
     def _pick_top_items(self, items: list[DigestItem], used: set[str]) -> list[DigestItem]:
         selected: list[DigestItem] = []
-        selected.extend(self._take(items, used, {"news", "tool"}, limit=1))
-        selected.extend(self._take(items, used, {"github"}, limit=1))
+        selected.extend(self._take(items, used, NEWS_TOOL_CATEGORIES, limit=1))
+        selected.extend(self._take(items, used, PROJECT_CATEGORIES, limit=1))
 
         remaining = self.top_limit - len(selected)
         if remaining > 0:
-            selected.extend(self._take(items, used, {"news", "tool"}, limit=remaining))
+            selected.extend(self._take(items, used, NEWS_TOOL_CATEGORIES, limit=remaining))
         remaining = self.top_limit - len(selected)
         if remaining > 0:
-            selected.extend(self._take(items, used, {"github"}, limit=remaining))
+            selected.extend(self._take(items, used, PROJECT_CATEGORIES, limit=remaining))
         return selected
 
     def _take(
@@ -82,3 +106,20 @@ class SectionPicker:
             if len(selected) >= limit:
                 break
         return selected
+
+    def _pick_briefing_lead_items(self, items: list[DigestItem], used: set[str]) -> list[DigestItem]:
+        selected: list[DigestItem] = []
+        selected.extend(self._take(items, used, NEWS_TOOL_CATEGORIES, limit=1))
+        remaining = 2 - len(selected)
+        if remaining > 0:
+            selected.extend(self._take(items, used, BRIEFING_CATEGORIES, limit=remaining))
+        return selected
+
+    def _infer_briefing_angle(self, items: list[DigestItem]) -> str:
+        news_tool_count = sum(1 for item in items if item.category in NEWS_TOOL_CATEGORIES)
+        github_project_count = sum(1 for item in items if item.category in PROJECT_CATEGORIES)
+        if news_tool_count >= 3:
+            return "今天的主线偏行业与产品更新"
+        if github_project_count >= 3:
+            return "今天的主线偏开源项目和工程落地"
+        return "今天的主线由新闻和项目共同推动"

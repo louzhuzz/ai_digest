@@ -55,102 +55,7 @@ def _render_image(url: str, alt: str = "") -> str:
 
 
 def markdown_to_html(markdown: str) -> str:
-    parts: list[str] = []
-    in_unordered_list = False
-    in_ordered_list = False
-
-    for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-        if not line.strip():
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            continue
-
-        if line.startswith("# "):
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            parts.append(f"<h1>{_render_inline(line[2:].strip())}</h1>")
-            continue
-
-        img_match = IMAGE_PATTERN.match(line.strip())
-        if img_match:
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            alt, url = img_match.groups()
-            parts.append(f"<p>{_render_image(url, alt)}</p>")
-            continue
-
-        if line.startswith("## "):
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            parts.append(
-                f'<p style="{WECHAT_H2_STYLE}"><strong>{_render_inline(line[3:].strip())}</strong></p>'
-            )
-            continue
-
-        if line.startswith("### "):
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            parts.append(
-                f'<p style="{WECHAT_H3_STYLE}"><strong>{_render_inline(line[4:].strip())}</strong></p>'
-            )
-            continue
-
-        if line.startswith("- "):
-            if in_ordered_list:
-                parts.append("</ol>")
-                in_ordered_list = False
-            if not in_unordered_list:
-                parts.append("<ul>")
-                in_unordered_list = True
-            parts.append(f"<li>{_render_inline(line[2:].strip())}</li>")
-            continue
-
-        ordered_match = ORDERED_LIST_PATTERN.match(line.strip())
-        if ordered_match:
-            if in_unordered_list:
-                parts.append("</ul>")
-                in_unordered_list = False
-            if not in_ordered_list:
-                parts.append("<ol>")
-                in_ordered_list = True
-            parts.append(f"<li>{_render_inline(ordered_match.group(1).strip())}</li>")
-            continue
-
-        if in_unordered_list:
-            parts.append("</ul>")
-            in_unordered_list = False
-        if in_ordered_list:
-            parts.append("</ol>")
-            in_ordered_list = False
-        parts.append(f"<p>{_render_inline(line)}</p>")
-
-    if in_unordered_list:
-        parts.append("</ul>")
-    if in_ordered_list:
-        parts.append("</ol>")
-
-    return "".join(parts)
+    return render_wechat_html(markdown)
 
 
 @dataclass
@@ -188,12 +93,12 @@ class WeChatDraftPublisher:
         return {"articles": [article]}
 
     def publish(self, markdown: str, title: str = "AI 每日新闻速递") -> str:
-        if self.image_uploader is not None:
-            markdown = self.image_uploader.upload_all(markdown)
         if self.dry_run or not self.access_token:
             payload = self.build_payload(title=title, markdown=markdown)
             self.last_payload = payload
             return ""
+        if self.image_uploader is not None:
+            markdown = self.image_uploader.upload_all(markdown)
 
         cover_media_id = self.cover_media_id
         if not cover_media_id:

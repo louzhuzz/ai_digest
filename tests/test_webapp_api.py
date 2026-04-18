@@ -47,6 +47,9 @@ class FakePublisher:
         self.calls.append((markdown, title))
         return "draft-xyz"
 
+    def build_payload(self, *, title: str, markdown: str, **kwargs) -> dict:
+        return {"articles": [{"content": f"<preview>{title}:{markdown}</preview>"}]}
+
 
 class BlockingPublisher:
     def __init__(self) -> None:
@@ -131,6 +134,36 @@ class WebAppApiTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertTrue(seen["dry_run"])
             self.assertFalse(seen["draft_mode"])
+
+    def test_run_does_not_call_publisher_for_preview_html(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            publisher = FakePublisher()
+            app = create_app(
+                storage_root=Path(tmpdir),
+                runner_factory=lambda settings: FakeRunner(),
+                publisher_factory=lambda settings: publisher,
+            )
+            client = TestClient(app)
+
+            resp = client.post("/api/run")
+
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(publisher.calls, [])
+
+    def test_update_preview_uses_same_wechat_renderer_as_publish(self) -> None:
+        from ai_digest.wechat_renderer import render_wechat_html
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app = create_app(storage_root=Path(tmpdir))
+            client = TestClient(app)
+            markdown = "# Title\n\n## Section\n\n1. 第一条\n2. 第二条"
+
+            update = client.post("/api/update", json={"markdown": markdown})
+
+            self.assertEqual(update.status_code, 200)
+            preview = client.get("/api/preview")
+            self.assertEqual(preview.status_code, 200)
+            self.assertEqual(preview.json()["html"], render_wechat_html(markdown))
 
     def test_update_and_publish(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

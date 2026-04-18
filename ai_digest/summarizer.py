@@ -6,6 +6,7 @@ from typing import Iterable
 
 from .event_clusterer import EventClusterer
 from .models import DigestItem, EventCluster
+from .section_picker import BriefingSelection
 
 
 class RuleBasedSummarizer:
@@ -47,17 +48,17 @@ class DigestPayloadBuilder:
         items: Iterable[DigestItem],
         date: str,
         *,
-        clusters: list[EventCluster] | None = None,
+        briefing_selection: BriefingSelection | None = None,
     ) -> dict[str, object]:
         ordered = list(items)
-        grouped = clusters or self.clusterer.cluster(ordered)
-        top_event_clusters = [self._serialize_cluster(cluster) for cluster in grouped if cluster.category == "event"]
-        top_project_clusters = [self._serialize_cluster(cluster) for cluster in grouped if cluster.category == "project"]
+        if briefing_selection is None:
+            raise ValueError("briefing_selection is required for article input")
         return {
             "date": date,
             "signal_pool_size": len(ordered),
-            "top_event_clusters": top_event_clusters,
-            "top_project_clusters": top_project_clusters,
+            "briefing_angle": briefing_selection.briefing_angle,
+            "lead_items": [self._serialize_item(item) for item in briefing_selection.lead_items],
+            "secondary_items": [self._serialize_item(item) for item in briefing_selection.secondary_items],
         }
 
     def _serialize_item(self, item: DigestItem) -> dict[str, object]:
@@ -67,8 +68,8 @@ class DigestPayloadBuilder:
             payload["published_at"] = published_at.isoformat()
         summary = str(payload.get("summary") or payload.get("metadata", {}).get("description") or "")
         payload["summary"] = summary
-        if len(summary) > 400:
-            payload["summary"] = summary[:397] + "..."
+        if len(summary) > 220:
+            payload["summary"] = summary[:217] + "..."
         payload["avatar_url"] = item.metadata.get("avatar_url", "")
         return payload
 

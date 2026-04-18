@@ -19,6 +19,7 @@ class DefaultRunnerArkTest(unittest.TestCase):
             ),
             dry_run=False,
             draft_mode=True,
+            llm_enabled=True,
         )
 
         with patch("ai_digest.defaults.build_default_publisher", return_value=object()):

@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 from ai_digest.models import DigestItem
-from ai_digest.section_picker import SectionPicker
+from ai_digest.section_picker import BriefingSelection, SectionPicker
 
 
 def _item(title: str, category: str, score: float, dedupe_key: str, source: str = "Test Source") -> DigestItem:
@@ -20,6 +20,67 @@ def _item(title: str, category: str, score: float, dedupe_key: str, source: str 
 
 
 class SectionPickerTest(unittest.TestCase):
+    def test_pick_briefing_allows_secondary_items_to_degrade_when_candidates_are_insufficient(self) -> None:
+        picker = SectionPicker()
+        briefing = picker.pick_briefing(
+            [
+                _item("News One", "news", 0.99, "news:one", source="News A"),
+            ]
+        )
+
+        self.assertEqual(1, len(briefing.lead_items))
+        self.assertEqual(0, len(briefing.secondary_items))
+
+    def test_pick_briefing_prefers_news_or_tool_for_lead_items(self) -> None:
+        picker = SectionPicker()
+        briefing = picker.pick_briefing(
+            [
+                _item("News One", "news", 0.99, "news:one", source="News A"),
+                _item("GitHub One", "github", 0.98, "github:one", source="GitHub A"),
+                _item("Tool One", "tool", 0.97, "tool:one", source="Tool A"),
+                _item("Project One", "project", 0.96, "project:one", source="Project A"),
+                _item("News Two", "news", 0.95, "news:two", source="News B"),
+                _item("GitHub Two", "github", 0.94, "github:two", source="GitHub B"),
+            ]
+        )
+
+        self.assertIsInstance(briefing, BriefingSelection)
+        self.assertEqual(2, len(briefing.lead_items))
+        self.assertGreaterEqual(len(briefing.secondary_items), 2)
+        self.assertLessEqual(len(briefing.secondary_items), 3)
+        self.assertIn(briefing.lead_items[0].category, {"news", "tool"})
+        self.assertTrue({item.dedupe_key for item in briefing.lead_items}.isdisjoint(
+            {item.dedupe_key for item in briefing.secondary_items}
+        ))
+
+    def test_section_picker_treats_project_as_project_class_content_in_pick_path(self) -> None:
+        picker = SectionPicker()
+        sections = picker.pick(
+            [
+                _item("Project One", "project", 0.99, "project:one", source="Project A"),
+                _item("News One", "news", 0.98, "news:one", source="News A"),
+                _item("Tool One", "tool", 0.97, "tool:one", source="Tool A"),
+                _item("Project Two", "project", 0.96, "project:two", source="Project B"),
+            ]
+        )
+
+        self.assertTrue(any(item.category == "project" for item in sections.top_items + sections.github_items))
+
+    def test_pick_briefing_infers_angle_from_selected_items(self) -> None:
+        picker = SectionPicker()
+        briefing = picker.pick_briefing(
+            [
+                _item("GitHub One", "github", 0.99, "github:one", source="GitHub A"),
+                _item("Project One", "project", 0.98, "project:one", source="Project A"),
+                _item("GitHub Two", "github", 0.97, "github:two", source="GitHub B"),
+                _item("News One", "news", 0.96, "news:one", source="News A"),
+                _item("Project Two", "project", 0.95, "project:two", source="Project B"),
+                _item("Project Three", "project", 0.94, "project:three", source="Project C"),
+            ]
+        )
+
+        self.assertEqual("今天的主线偏开源项目和工程落地", briefing.briefing_angle)
+
     def test_section_picker_mixes_news_and_github_in_top_items_when_both_exist(self) -> None:
         picker = SectionPicker()
         sections = picker.pick(
