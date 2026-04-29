@@ -22,6 +22,7 @@ skills-lock.json
 ai_digest_agent/
 tmp-web-access/
 
+gh.html
 pdf_skill_tmp.md
 openclaw_summary.pdf
 tesseract_rapid_wrapper.py
