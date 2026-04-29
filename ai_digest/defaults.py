@@ -102,7 +102,9 @@ def build_default_source_specs() -> list[SourceSpec]:
         SourceSpec(name="新智元", url="https://www.aiera.com.cn/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/", "/news/", "/post/")),
         SourceSpec(name="量子位", url="https://www.qbitai.com/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/", "/post/", "/news/", "/202")),
         SourceSpec(name="CSDN AI", url="https://aillm.csdn.net/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/details/", "/p/", "/news/", "/article/")),
-        SourceSpec(name="大黑AI速报", url="https://news.daheyai.com/rss.php", kind="rss", category="news"),
+        SourceSpec(name="36氪", url="https://36kr.com/feed", kind="rss", category="news"),
+        SourceSpec(name="雷锋网", url="https://www.leiphone.com/feed", kind="rss", category="news"),
+        SourceSpec(name="爱范儿", url="https://www.ifanr.com/feed", kind="rss", category="news"),
     ]
 
 

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import urljoin, urlparse
 
-from ..http_client import open_url
+from ..http_client import decode_response, open_url
 from ..models import DigestItem
 
 LINK_PATTERN = re.compile(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.I | re.S)
@@ -107,7 +107,7 @@ class WebNewsIndexCollector:
 
     def collect(self, page_url: str) -> list[DigestItem]:
         with open_url(page_url, http_client=self.http_client) as response:
-            html = response.read().decode("utf-8", errors="replace")
+            html = decode_response(response)
         return self.parse_index(html, base_url=page_url)
 
     def parse_index(self, html: str, base_url: str) -> list[DigestItem]:
