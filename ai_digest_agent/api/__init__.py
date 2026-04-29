@@ -1,2 +1,0 @@
-# api/
-from .schemas import *

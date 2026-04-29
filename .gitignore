@@ -14,10 +14,16 @@ data/
 *.sqlite3
 *.log
 
+tests/
+docs/
+.sisyphus/
+skills/
+skills-lock.json
+ai_digest_agent/
+tmp-web-access/
+
 pdf_skill_tmp.md
 openclaw_summary.pdf
 tesseract_rapid_wrapper.py
-
-tmp-web-access/
-skills/
-skills-lock.json
+run_publish.bat
+run_webapp.bat
