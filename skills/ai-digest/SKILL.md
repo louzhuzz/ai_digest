@@ -11,7 +11,7 @@ All tools via `python -m ai_digest.tool_run <command>`:
 
 | Command | Description | Input/Output |
 |---------|-------------|-------------|
-| `collect` | Fetch all 11 sources | stdout: JSON items |
+| `collect` | Fetch all sources | stdout: JSON items |
 | `dedup` | Cross-run dedup | stdin JSON → stdout filtered |
 | `persist` | Save dedup state to SQLite | stdin JSON |
 | `publish` | Submit WeChat draft | stdin markdown → JSON result |
@@ -35,16 +35,40 @@ python -m ai_digest.tool_run dedup < data/items.json > data/filtered.json
 
 Remove items already published within 7 days.
 
-### 3. Analyze & Think
+### 3. AI Check: Time Filtering (REQUIRED)
 
-Read `data/filtered.json`. You decide:
+**Before any analysis, filter by date.** This is your single biggest source of error.
+
+- Discard items older than **3 days** (`published_at` < today - 3d). They are not "today's news."
+- If you choose to include an older item (for context/background), **explicitly note its date** in the article.
+- Tip: tools like `webfetch` can be used to check an article's actual publish date if the `published_at` field looks wrong.
+
+### 4. AI Search & Verify (REQUIRED)
+
+**Do not passively accept collector output.** The collector is a starting point. You must:
+
+- **Verify facts** from the original source. Use `webfetch` to open key articles and confirm title/date/quotes.
+- **Search for news the collector missed.** Use `MiniMax_web_search` to find breaking news, trending topics, and Chinese AI news that the collector might have failed to fetch (many sources time out or return 403).
+- **Cross-reference** important claims. If a claim appears only in one source, verify it independently.
+- **Log your search** — note which items you verified and which you added from search.
+
+Search queries to consider:
+- Latest model releases (DeepSeek, Qwen, Kimi, Claude, GPT)
+- Chinese AI industry news from last 24 hours
+- GitHub trending AI projects
+- Open-source releases
+
+### 5. Analyze & Think
+
+Read `data/filtered.json` **plus your own search findings**. You decide:
+
 - What's the main theme today? Model releases? Open-source projects? Industry moves?
 - Which items are related and should be grouped?
 - Which ones are worth expanding vs. mentioning in passing?
 
 This is **your judgment call** — no more ranking formulas or section quotas.
 
-### 4. Write the Article
+### 6. Write the Article
 
 You write it. Constraints:
 
@@ -53,7 +77,8 @@ You write it. Constraints:
 - **Don't cover everything equally**. Pick 2-3 main points, mention others briefly.
 - No code blocks, tables, blockquotes, or HTML tags.
 - No labels like "摘要:", "价值:", "为什么值得跟:" — just natural prose.
-- Only use facts from the candidate pool. Don't fabricate.
+- **Only use facts you have verified**. If you're unsure, say so or skip it.
+- **Explicitly mention dates** for any item that is not from today.
 - Title should be 12-24 characters, specific to today, not generic.
 - Professional tone, not marketing or colloquial.
 
@@ -70,7 +95,7 @@ Paragraph text
 ![Alt](image-url)
 ```
 
-### 5. Save Article
+### 7. Save Article
 
 ```bash
 cat > data/article.md << 'ARTICLE'
@@ -80,13 +105,7 @@ Your article content...
 ARTICLE
 ```
 
-Also save HTML preview for the webapp:
-```bash
-# The webapp will auto-convert on preview, or you can run:
-# (No separate command needed — webapp converts markdown to HTML)
-```
-
-### 6. Publish
+### 8. Publish
 
 ```bash
 cat data/article.md | python -m ai_digest.tool_run publish --title "Your Title"
@@ -94,7 +113,7 @@ cat data/article.md | python -m ai_digest.tool_run publish --title "Your Title"
 
 Output: `{"draft_id": "xxx"}` on success, `{"error": "..."}` on failure.
 
-### 7. Persist Dedup State
+### 9. Persist Dedup State
 
 ```bash
 python -m ai_digest.tool_run persist < data/filtered.json
@@ -102,7 +121,7 @@ python -m ai_digest.tool_run persist < data/filtered.json
 
 Always do this after publishing so the same items won't be collected again tomorrow.
 
-### 8. (Optional) Cover Image
+### 10. (Optional) Cover Image
 
 ```bash
 python -m ai_digest.tool_run cover --title "Your Title" --output data/cover.jpg
@@ -115,7 +134,12 @@ For a fast publish cycle:
 ```bash
 python -m ai_digest.tool_run collect > data/items.json
 python -m ai_digest.tool_run dedup < data/items.json > data/filtered.json
-# Read data/filtered.json, write article to data/article.md
+
+# STEP 1: Filter by date (discard items > 3d old)
+# STEP 2: Search & verify (webfetch key articles, web search for missed news)
+# STEP 3: Write article with your findings
+# STEP 4: Publish + persist
+
 cat data/article.md | python -m ai_digest.tool_run publish --title "Your Title"
 python -m ai_digest.tool_run persist < data/filtered.json
 ```
@@ -140,6 +164,9 @@ The webapp lets you preview the rendered HTML, edit markdown, and publish. But t
 
 ## Quality Notes
 
+- **时效性是生命线。** 日报不是周报，超过 3 天的新闻必须标记日期或干脆不用。
+- **验证，不要转载。** 每条重要新闻都要打开原文确认标题、日期、关键数据。从搜索补进的新闻也要打开原文核实。
+- **搜索是 agent 的职责。** 工具脚本抓不到的东西，你去搜。网络超时、403、DNS 失败是常态，不是放弃的理由。
 - Be accurate. Don't fabricate facts, figures, or links.
 - Have an opinion. Don't just summarize — say what matters.
 - Every paragraph should answer "why should a developer care?"
