@@ -17,7 +17,6 @@ data/
 tests/
 docs/
 .sisyphus/
-skills/
 skills-lock.json
 ai_digest_agent/
 tmp-web-access/

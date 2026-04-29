@@ -1,0 +1,7 @@
+interface:
+  display_name: "Project Planning + Execution"
+  short_description: "Plan projects and implement them step by step"
+  default_prompt: "Use $project-planning-execution to turn a new project idea into a concrete plan, then implement it in small coding steps."
+
+policy:
+  allow_implicit_invocation: true
