@@ -1,4 +1,5 @@
 # ai_digest/tool_run.py — Sisyphus 可调用的工具脚本 CLI
+# -*- coding: utf-8 -*-
 #
 # 用法:
 #   python -m ai_digest.tool_run collect                    # 收集全部来源
@@ -40,6 +41,12 @@ def _deserialize_item(d: dict) -> DigestItem:
 
 
 def _json_dump(obj, fp) -> None:
+    # Windows: ensure UTF-8 to console / file pipe
+    if hasattr(fp, "reconfigure"):
+        try:
+            fp.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     json.dump(obj, fp, ensure_ascii=False, default=str)
 
 

@@ -1,4 +1,5 @@
 # ai_digest/webapp/app.py — 简化版 web 工作台
+# -*- coding: utf-8 -*-
 #
 # 注意：生成流程由 Sisyphus（在 IDE 中）通过 tool_run 工具脚本完成。
 # webapp 只负责预览、编辑和发布已生成的草稿。

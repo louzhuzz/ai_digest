@@ -1,4 +1,5 @@
 """CLI 入口 — 指向 tool_run 工具脚本。"""
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import sys
