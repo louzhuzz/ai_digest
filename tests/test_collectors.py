@@ -139,6 +139,23 @@ class CollectorParserTest(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].summary, "The first open-source harness builder for AI coding.")
 
+    def test_github_trending_collector_strips_sponsor_star_noise_from_summary(self) -> None:
+        html = """
+        <article class="Box-row">
+          <h2 class="h3 lh-condensed">
+            <a href="/BasedHardware/omi"> BasedHardware / omi </a>
+          </h2>
+          <p>Sponsor Star BasedHardware / omi AI that sees your screen.</p>
+          <span class="d-inline-block float-sm-right">824 stars today</span>
+        </article>
+        """
+
+        collector = GitHubTrendingCollector()
+        items = collector.parse_trending(html, page_url="https://github.com/trending")
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].summary, "AI that sees your screen.")
+
 
 if __name__ == "__main__":
     unittest.main()

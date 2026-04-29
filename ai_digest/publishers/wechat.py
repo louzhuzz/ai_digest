@@ -12,46 +12,100 @@ from urllib import parse, request
 from ..cover_image import generate_cover_image
 from ..http_client import DEFAULT_TIMEOUT_SECONDS
 from ..wechat_image_uploader import WeChatImageUploader
-from ..wechat_renderer import render_wechat_html
 
 
-LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
-ORDERED_LIST_PATTERN = re.compile(r"\d+\.\s+(.*)")
+# ── Markdown → 微信公众号 HTML 渲染 ─────────────────────
 
-WECHAT_H2_STYLE = (
-    "margin:1.4em 0 0.55em;"
-    "font-size:22px;"
-    "font-weight:700;"
-    "line-height:1.45;"
-    "color:#1f2937;"
-)
-WECHAT_H3_STYLE = (
-    "margin:1em 0 0.45em;"
-    "font-size:18px;"
-    "font-weight:700;"
-    "line-height:1.5;"
-    "color:#334155;"
-)
-WECHAT_IMAGE_STYLE = "max-width:100%; height:auto; margin:1em 0; display:block;"
+_WX_PARAGRAPH_STYLE = 'font-size:16px; line-height:1.8; color:#333; margin:1em 0;'
+_WX_H1_STYLE = 'font-size:20px; font-weight:bold; color:#1a1a1a; margin:1.2em 0 0.6em;'
+_WX_H2_STYLE = 'margin:1.4em 0 0.55em; font-size:22px; font-weight:700; line-height:1.45; color:#1f2937;'
+_WX_H3_STYLE = 'margin:1em 0 0.45em; font-size:18px; font-weight:700; line-height:1.5; color:#334155;'
+_WX_LINK_STYLE = 'color:#1a73e8; text-decoration:underline;'
+_WX_IMAGE_STYLE = 'max-width:100%; height:auto; margin:1em 0; display:block;'
+
+_WX_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+_WX_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+_WX_BOLD_PATTERN = re.compile(r"\*\*([^*]+)\*\*")
+_WX_ORDERED_LIST = re.compile(r"\d+\.\s+(.*)")
 
 
-def _render_inline(text: str) -> str:
+def _wx_render_inline(text: str) -> str:
     parts: list[str] = []
     last = 0
-    for match in LINK_PATTERN.finditer(text):
+    for match in _WX_LINK_PATTERN.finditer(text):
         parts.append(html.escape(text[last:match.start()]))
         label, url = match.groups()
-        parts.append(f'<a href="{html.escape(url, quote=True)}">{html.escape(label)}</a>')
+        parts.append(f'<a href="{html.escape(url, quote=True)}" style="{_WX_LINK_STYLE}">{html.escape(label)}</a>')
         last = match.end()
     parts.append(html.escape(text[last:]))
     rendered = "".join(parts)
-    return BOLD_PATTERN.sub(lambda match: f"<strong>{html.escape(match.group(1))}</strong>", rendered)
+    return _WX_BOLD_PATTERN.sub(lambda m: f"<strong>{html.escape(m.group(1))}</strong>", rendered)
 
 
-def _render_image(url: str, alt: str = "") -> str:
-    return f'<img src="{html.escape(url, quote=True)}" alt="{html.escape(alt)}" style="{WECHAT_IMAGE_STYLE}"/>'
+def _wx_render_image_line(line: str) -> str:
+    match = _WX_IMAGE_PATTERN.search(line)
+    if not match:
+        return ""
+    alt, url = match.groups()
+    return f'<p><img src="{html.escape(url, quote=True)}" alt="{html.escape(alt)}" style="{_WX_IMAGE_STYLE}"/></p>'
+
+
+def render_wechat_html(markdown: str) -> str:
+    """将 Markdown 转换为微信公众号兼容的 HTML（内联样式）。"""
+    parts: list[str] = []
+    in_list = False
+    for raw_line in markdown.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            continue
+        if line.startswith("![](") or _WX_IMAGE_PATTERN.match(line.strip()):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            img = _wx_render_image_line(line.strip())
+            if img:
+                parts.append(img)
+            continue
+        if line.startswith("# "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f'<p style="{_WX_H1_STYLE}"><strong>{_wx_render_inline(line[2:].strip())}</strong></p>')
+            continue
+        if line.startswith("## "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f'<p style="{_WX_H2_STYLE}"><strong>{_wx_render_inline(line[3:].strip())}</strong></p>')
+            continue
+        if line.startswith("### "):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f'<p style="{_WX_H3_STYLE}"><strong>{_wx_render_inline(line[4:].strip())}</strong></p>')
+            continue
+        if line.startswith("- "):
+            if not in_list:
+                parts.append('<ul style="margin:1em 0; padding-left:1.5em;">')
+                in_list = True
+            parts.append(f'<li style="margin-bottom:0.3em;">{_wx_render_inline(line[2:].strip())}</li>')
+            continue
+        if _WX_ORDERED_LIST.match(line.strip()):
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            parts.append(f'<p style="{_WX_PARAGRAPH_STYLE}">{_wx_render_inline(line.strip())}</p>')
+            continue
+        if in_list:
+            parts.append("</ul>")
+            in_list = False
+        parts.append(f'<p style="{_WX_PARAGRAPH_STYLE}">{_wx_render_inline(line)}</p>')
+    if in_list:
+        parts.append("</ul>")
+    return "".join(parts)
 
 
 def markdown_to_html(markdown: str) -> str:

@@ -13,7 +13,7 @@ REPO_LINK_PATTERN = re.compile(r"<h2\b[^>]*>.*?<a\b[^>]*\shref=\"(/[^\"?#]+/[^\"
 AVATAR_BASE = "https://avatars.githubusercontent.com/u/"
 STARS_PATTERN = re.compile(r"([0-9][0-9,]*)\s+stars?\s+today", re.I)
 DESCRIPTION_PATTERN = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
-STAR_NOISE_PATTERN = re.compile(r"^Star\s+[^ ]+\s*/\s*[^ ]+\s+", re.I)
+STAR_NOISE_PATTERN = re.compile(r"^(?:Sponsor\s+)?Star\s+[^ ]+\s*/\s*[^ ]+\s+", re.I)
 AI_INCLUDE_TERMS = (
     " ai ",
     " llm",

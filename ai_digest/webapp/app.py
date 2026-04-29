@@ -1,7 +1,11 @@
+# ai_digest/webapp/app.py — 简化版 web 工作台
+#
+# 注意：生成流程由 Sisyphus（在 IDE 中）通过 tool_run 工具脚本完成。
+# webapp 只负责预览、编辑和发布已生成的草稿。
+
 from __future__ import annotations
 
 import hashlib
-import json
 import threading
 import time
 from pathlib import Path
@@ -11,8 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..article_linter import ArticleLinter
-from ..defaults import build_default_publisher, build_default_runner
+from ..defaults import build_default_publisher
 from ..publishers.wechat import markdown_to_html
 from ..settings import AppSettings, load_settings
 from .storage import DraftStorage
@@ -29,10 +32,8 @@ def _extract_title(markdown: str, default: str = "AI 每日新闻速递") -> str
 def create_app(
     *,
     storage_root: Path | None = None,
-    runner_factory: Callable[[AppSettings], Any] = build_default_runner,
     publisher_factory: Callable[[AppSettings], Any] = build_default_publisher,
     settings_loader: Callable[[], AppSettings] = load_settings,
-    linter_factory: Callable[[], ArticleLinter] = ArticleLinter,
 ) -> FastAPI:
     app = FastAPI()
     root = storage_root or Path("data")
@@ -52,60 +53,14 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/api/run")
-    def run() -> dict[str, Any]:
-        settings = settings_loader()
-        preview_settings = AppSettings(
-            wechat=settings.wechat,
-            ark=settings.ark,
-            dry_run=True,
-            draft_mode=False,
-            state_db_path=settings.state_db_path,
-            llm_enabled=settings.llm_enabled,
-        )
-        runner = runner_factory(preview_settings)
-        result = runner.run()
-        if result.markdown:
-            storage.write_markdown(result.markdown)
-            storage.write_html(markdown_to_html(result.markdown))
-        # 写 fact-card 数据
-        from collections import Counter
-
-        clusters = result.clusters or []
-        source_dist: dict[str, int] = {}
-        for cluster in clusters:
-            for source in cluster.sources:
-                source_dist[source] = source_dist.get(source, 0) + 1
-        run_data = {
-            "clusters": [
-                {
-                    "topic_tag": cluster.topic_tag,
-                    "sources": list(cluster.sources),
-                    "canonical_title": cluster.canonical_title,
-                }
-                for cluster in clusters
-            ],
-            "total_items": result.items_count,
-            "source_distribution": source_dist,
-            "high_signal_dropped": [],
-        }
-        run_data_path = root / "run_data.json"
-        with run_data_path.open("w", encoding="utf-8") as f:
-            json.dump(run_data, f, ensure_ascii=False)
-        storage.append_history(
-            {
-                "mode": "run",
-                "status": result.status,
-                "error": result.error,
-                "items_count": result.items_count,
-                "draft_id": result.publisher_draft_id,
-            }
-        )
+    @app.get("/api/draft")
+    def draft_info() -> dict[str, Any]:
+        """返回当前草稿信息。"""
+        md = storage.read_markdown()
         return {
-            "status": result.status,
-            "error": result.error,
-            "items_count": result.items_count,
-            "draft_id": result.publisher_draft_id,
+            "has_draft": bool(md.strip()),
+            "chars": len(md.strip()),
+            "title": _extract_title(md) if md.strip() else "",
         }
 
     @app.get("/api/preview")
@@ -133,11 +88,6 @@ def create_app(
             markdown = storage.read_markdown()
             if not markdown.strip():
                 return {"status": "failed", "error": "no draft markdown found"}
-            linter = linter_factory()
-            try:
-                linter.lint(markdown)
-            except Exception as exc:
-                return {"status": "failed", "error": f"Article lint failed: {exc}"}
 
             title = _extract_title(markdown)
             fingerprint = hashlib.sha256(f"{title}\n{markdown}".encode("utf-8")).hexdigest()
@@ -181,20 +131,6 @@ def create_app(
     @app.get("/api/history")
     def history() -> dict[str, Any]:
         return {"items": storage.read_history(limit=20)}
-
-    @app.get("/api/fact-card")
-    def fact_card() -> dict[str, Any]:
-        run_data_path = root / "run_data.json"
-        if not run_data_path.exists():
-            return {"clusters": [], "total_items": 0, "source_distribution": {}, "high_signal_dropped": []}
-        with run_data_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        return {
-            "clusters": data.get("clusters", []),
-            "total_items": data.get("total_items", 0),
-            "source_distribution": data.get("source_distribution", {}),
-            "high_signal_dropped": data.get("high_signal_dropped", []),
-        }
 
     return app
 
