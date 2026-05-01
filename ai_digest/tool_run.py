@@ -7,14 +7,19 @@
 #   python -m ai_digest.tool_run persist < items.json       # 持久化去重状态
 #   cat article.md | python -m ai_digest.tool_run publish   # 发布公众号
 #   python -m ai_digest.tool_run cover --title x --out x    # 生成封面图
+#   python -m ai_digest.tool_run cards --input cards.json --output-dir data/cards
 
 from __future__ import annotations
 
 import argparse
+import glob as glob_mod
 import json
+import os
 import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
+
+# cards 子命令在 cmd_cards 中延迟导入 image_card_generator
 
 from .cover_image import generate_cover_image
 from .defaults import build_default_collector, build_default_publisher
@@ -52,6 +57,23 @@ def _json_dump(obj, fp) -> None:
 
 def _json_load(fp) -> list:
     return json.load(fp)
+
+
+# ── access token 辅助 ────────────────────────────────────
+
+def _get_access_token(settings) -> str:
+    """从 settings 获取微信 access_token。"""
+    from .auth import WeChatAccessTokenClient
+    if not settings.wechat:
+        raise RuntimeError("未配置 WECHAT_APPID/WECHAT_APPSECRET")
+    client = WeChatAccessTokenClient(
+        appid=settings.wechat.appid,
+        appsecret=settings.wechat.appsecret,
+    )
+    token = client.get_access_token()
+    if not token:
+        raise RuntimeError("获取 access_token 失败")
+    return token
 
 
 # ── 子命令实现 ──────────────────────────────────────────
@@ -94,10 +116,21 @@ def cmd_persist() -> None:
     deduper.persist(items, now=now)
 
 
-def cmd_publish(title: str) -> None:
-    """从 stdin 读取 Markdown，发布到公众号，输出 JSON 结果。"""
+def cmd_publish(title: str, file_path: str | None = None) -> None:
+    """从文件或 stdin 读取 Markdown，发布到公众号，输出 JSON 结果。
+    
+    Args:
+        title: 文章标题
+        file_path: 可选，直接指定 markdown 文件路径（避免 PowerShell 管道编码问题）
+    """
     settings = load_settings()
-    markdown = sys.stdin.read()
+    
+    if file_path:
+        # 直接从文件读取，使用 UTF-8 编码（避免 PowerShell 管道编码问题）
+        with open(file_path, "r", encoding="utf-8") as f:
+            markdown = f.read()
+    else:
+        markdown = sys.stdin.read()
 
     publisher = build_default_publisher(settings)
     try:
@@ -116,6 +149,16 @@ def cmd_cover(title: str, output: str) -> None:
         f.write(data)
 
 
+def cmd_cards(input_path: str, output_dir: str) -> None:
+    """从 JSON 生成贴图卡片 PNG。"""
+    from .image_card_generator import generate_cards
+
+    paths = generate_cards(input_path, output_dir)
+
+    result = {"cards": [str(p) for p in paths], "count": len(paths)}
+    _json_dump(result, sys.stdout)
+
+
 # ── CLI 入口 ────────────────────────────────────────────
 
 _COMMANDS = {
@@ -124,14 +167,17 @@ _COMMANDS = {
     "persist": ("持久化去重状态到 SQLite", lambda: cmd_persist()),
     "publish": ("发布公众号草稿（stdin markdown）", lambda: _publish_wrapper()),
     "cover": ("生成封面图", lambda: _cover_wrapper()),
+    "cards": ("生成贴图卡片 PNG（从 JSON）", lambda: _cards_wrapper()),
+    "publish-newspic": ("发布贴图（newspic）草稿", lambda: _publish_newspic_wrapper()),
 }
 
 
 def _publish_wrapper() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--title", default="AI 每日新闻速递")
+    parser.add_argument("--file", default=None, help="Markdown 文件路径（推荐，避免 PowerShell 编码问题）")
     args, _ = parser.parse_known_args()
-    cmd_publish(args.title)
+    cmd_publish(args.title, file_path=args.file)
 
 
 def _cover_wrapper() -> None:
@@ -140,6 +186,54 @@ def _cover_wrapper() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_known_args()[0]
     cmd_cover(args.title, args.output)
+
+
+def _cards_wrapper() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, help="卡片数据 JSON 文件路径")
+    parser.add_argument("--output-dir", default="data/cards", help="输出目录（默认 data/cards）")
+    args = parser.parse_known_args()[0]
+    cmd_cards(args.input, args.output_dir)
+
+
+def cmd_publish_newspic(title: str, images: list[str], content: str = "", dry_run: bool = False) -> None:
+    """发布贴图（newspic）类型的公众号草稿。"""
+    settings = load_settings()
+    from .publishers.wechat import WeChatDraftPublisher
+    pub = WeChatDraftPublisher(
+        access_token=None if dry_run else _get_access_token(settings),
+        dry_run=dry_run,
+    )
+    media_id = pub.publish_newspic(image_paths=images, title=title, content=content)
+    _json_dump({"draft_id": media_id, "last_payload": pub.last_payload}, sys.stdout)
+
+
+def _publish_newspic_wrapper() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--title", default="AI 每日新闻速递")
+    parser.add_argument("--images", nargs="+", help="图片文件路径列表")
+    parser.add_argument("--image-dir", help="图片目录（自动选取所有 .png/.jpg 文件）")
+    parser.add_argument("--content", default="", help="正文内容（纯文本）")
+    parser.add_argument("--content-file", help="从文件读取正文（UTF-8）")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_known_args()[0]
+    images = args.images or []
+    if args.image_dir:
+        patterns = [
+            os.path.join(args.image_dir, "*.png"),
+            os.path.join(args.image_dir, "*.jpg"),
+            os.path.join(args.image_dir, "*.jpeg"),
+        ]
+        for pat in patterns:
+            images.extend(sorted(glob_mod.glob(pat)))
+    if not images:
+        print("错误: 必须指定 --images 或 --image-dir", file=sys.stderr)
+        sys.exit(1)
+    content = args.content or ""
+    if args.content_file:
+        with open(args.content_file, "r", encoding="utf-8") as f:
+            content = f.read()
+    cmd_publish_newspic(args.title, images, content=content, dry_run=args.dry_run)
 
 
 def build_parser() -> argparse.ArgumentParser:

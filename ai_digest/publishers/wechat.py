@@ -211,3 +211,159 @@ class WeChatDraftPublisher:
         if not media_id:
             raise RuntimeError(f"WeChat thumb upload failed: {decoded}")
         return media_id
+
+    def _upload_permanent_image(self, image_path: str) -> str:
+        """
+        上传单张图片为永久素材，返回 media_id。
+
+        使用 material/add_material 接口，type=image。
+        """
+        if not image_path:
+            raise RuntimeError("Empty image path")
+        
+        # 读取图片文件
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        
+        if not image_bytes:
+            raise RuntimeError(f"Empty image file: {image_path}")
+        
+        # 根据文件扩展名确定 MIME 类型
+        ext = image_path.lower().rsplit(".", 1)[-1] if "." in image_path else "jpeg"
+        mime_map = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "bmp": "image/bmp",
+        }
+        content_type = mime_map.get(ext, "image/jpeg")
+        filename = f"image.{ext}"
+        
+        # 构建 multipart/form-data 请求体
+        boundary = f"----OpenClaw{uuid.uuid4().hex}"
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="media"; filename="{filename}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode("utf-8") + image_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+        
+        url = f"{self.upload_api_url}?access_token={parse.quote(self.access_token or '')}&type=thumb"
+        req = request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        )
+        opener = self.http_client or request.urlopen
+        try:
+            with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
+                decoded = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"WeChat image upload request failed: {exc}") from exc
+        
+        if decoded.get("errcode"):
+            errmsg = decoded.get("errmsg", "unknown WeChat API error")
+            raise RuntimeError(f"WeChat image upload failed: {errmsg}")
+        
+        media_id = str(decoded.get("media_id", ""))
+        if not media_id:
+            raise RuntimeError(f"WeChat image upload failed: {decoded}")
+        return media_id
+
+    def _build_newspic_payload(
+        self,
+        title: str,
+        image_media_ids: list[str],
+        digest: str = "",
+        content: str = "",
+    ) -> dict[str, Any]:
+        """
+        构建 newspic 类型的草稿 payload。
+
+        参考微信公众号贴图 API：
+        - article_type: "newspic"
+        - image_info.image_list: 图片 media_id 列表（最多 20 张）
+        - content: 纯文本（不支持 HTML）
+        """
+        article = {
+            "title": title,
+            "author": "",
+            "digest": digest or title,
+            "content": content,
+            "article_type": "newspic",
+            "image_info": {
+                "image_list": [{"image_media_id": mid} for mid in image_media_ids]
+            },
+            "need_open_comment": 1,
+            "only_fans_can_comment": 0,
+        }
+        return {"articles": [article]}
+
+    def publish_newspic(
+        self,
+        image_paths: list[str],
+        title: str = "AI 每日新闻速递",
+        digest: str = "",
+        content: str = "",
+    ) -> str:
+        """
+        发布贴图（newspic）类型的公众号文章。
+
+        Args:
+            image_paths: 图片文件路径列表（最多 20 张）
+            title: 文章标题
+            digest: 摘要（可选）
+            content: 正文纯文本（可选，贴图正文不支持 HTML）
+
+        Returns:
+            草稿 media_id
+        """
+        # 验证图片数量
+        if len(image_paths) > 20:
+            raise ValueError(f"Too many images: {len(image_paths)} (max 20)")
+        
+        # dry_run 模式：不实际上传，不调用 draft/add
+        if self.dry_run or not self.access_token:
+            # 构建虚拟 media_id 列表用于 payload 预览
+            fake_media_ids = [f"fake_media_{i}" for i in range(len(image_paths))]
+            payload = self._build_newspic_payload(
+                title=title,
+                image_media_ids=fake_media_ids,
+                digest=digest,
+                content=content,
+            )
+            self.last_payload = payload
+            return ""
+        
+        # 实际上传图片为永久素材
+        image_media_ids = []
+        for path in image_paths:
+            media_id = self._upload_permanent_image(path)
+            image_media_ids.append(media_id)
+        
+        # 构建 payload
+        payload = self._build_newspic_payload(
+            title=title,
+            image_media_ids=image_media_ids,
+            digest=digest,
+            content=content,
+        )
+        self.last_payload = payload
+        
+        # 调用 draft/add 接口创建草稿
+        url = f"{self.api_url}?access_token={parse.quote(self.access_token)}"
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        opener = self.http_client or request.urlopen
+        try:
+            with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
+                decoded = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"WeChat draft add request failed: {exc}") from exc
+        if decoded.get("errcode"):
+            errmsg = decoded.get("errmsg", "unknown WeChat API error")
+            raise RuntimeError(f"WeChat draft add failed: {errmsg}")
+        media_id = str(decoded.get("media_id", ""))
+        if not media_id:
+            raise RuntimeError(f"WeChat draft add failed: {decoded}")
+        return media_id
