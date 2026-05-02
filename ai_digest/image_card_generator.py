@@ -19,7 +19,10 @@ from typing import Any
 # 数据模型
 # ---------------------------------------------------------------------------
 
-CARD_TYPES = {"cover", "content", "list", "data", "compare", "closing"}
+CARD_TYPES = {
+    "cover", "content", "list", "data", "compare", "closing",
+    "content-grid", "content-hero", "content-steps", "content-quote",
+}
 
 
 @dataclass
@@ -45,25 +48,31 @@ class CardData:
 
 
 # ---------------------------------------------------------------------------
-# 设计规范常量（参考素材：产品陈大头风格）
+# 设计规范常量
 # ---------------------------------------------------------------------------
 
-# 配色（来自参考图片精确提取）
-_COLOR_TEXT = "#333333"
-_COLOR_SUB = "#666666"
-_COLOR_LIGHT = "#999999"
-_COLOR_ACCENT = "#ff6600"
+# 配色体系（暖橙强调 + 深灰正文）
+_COLOR_TEXT = "#1d1d1f"
+_COLOR_SUB = "#6e6e73"
+_COLOR_LIGHT = "#86868b"
+_COLOR_ACCENT = "#ff6b21"
 _COLOR_ACCENT_BG = "#fff5eb"
-_COLOR_CARD_NUM = "#e0e0e0"
-_COLOR_WECHAT_GREEN = "#1aad19"
-_COLOR_BG = "#f5f5f5"
-_COLOR_QUOTE_BG = "#f5f5f5"
-_COLOR_COVER_CIRCLE = "#fde8d8"
+_COLOR_ACCENT_DARK = "#e55a1b"
+_COLOR_CARD_NUM = "#f0f0f0"
+_COLOR_WECHAT_GREEN = "#07c160"
+_COLOR_BG = "#f5f5f7"
+_COLOR_QUOTE_BG = "#fafafa"
+
+# 封面专用色
+_COLOR_COVER_GRADIENT_START = "#ff8c42"
+_COLOR_COVER_GRADIENT_END = "#ff6b21"
+_COLOR_COVER_PATTERN = "rgba(255,107,33,0.08)"
 
 _FONT_FAMILY = (
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, "
-    "'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    "-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', "
+    "'Helvetica Neue', Arial, sans-serif"
 )
+_FONT_MONO = "'SF Mono', 'Fira Code', 'Consolas', monospace"
 
 
 # ---------------------------------------------------------------------------
@@ -84,105 +93,62 @@ html, body {{
 .card {{
     width: 900px; height: 1200px;
     background: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    border-radius: 20px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.055);
     display: flex;
     flex-direction: column;
     position: relative;
-    padding: 48px 48px 40px;
+    padding: 34px 42px 30px;
+    overflow: hidden;
 }}
 /* 卡片编号 — 装饰性大号数字，右上角 */
 .card-num {{
     position: absolute;
-    top: 24px; right: 32px;
-    font-size: 120px;
-    font-weight: 700;
+    top: 14px; right: 24px;
+    font-size: 78px;
+    font-weight: 800;
     color: {_COLOR_CARD_NUM};
     line-height: 1;
     z-index: 0;
     user-select: none;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.65;
 }}
 /* 标题下橙色分隔条 */
 .divider {{
-    width: 40px; height: 3px;
-    background: {_COLOR_ACCENT};
+    width: 54px; height: 4px;
+    background: linear-gradient(90deg, {_COLOR_ACCENT}, {_COLOR_COVER_GRADIENT_START});
     border-radius: 2px;
-    margin: 12px 0 24px;
+    margin: 10px 0 16px;
 }}
 /* 底栏 — 分割线 + 绿点 + 署名 */
 .footer {{
     margin-top: auto;
-    padding-top: 16px;
-    border-top: 1px solid #e5e5e5;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0,0,0,0.06);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 14px;
     color: {_COLOR_LIGHT};
+    position: relative;
+    z-index: 1;
 }}
 .footer .green-dot {{
     width: 8px; height: 8px;
     border-radius: 50%;
     background: {_COLOR_WECHAT_GREEN};
 }}
-/* 引用块 — 左侧橙色边框 */
-.quote-box {{
-    padding: 24px 24px;
-    background: {_COLOR_QUOTE_BG};
-    border-left: 4px solid {_COLOR_ACCENT};
-    border-radius: 0 8px 8px 0;
-    margin: 24px 0;
-}}
-.quote-title {{
-    font-size: 22px;
-    font-weight: 600;
-    color: {_COLOR_ACCENT};
-    margin: 0 0 10px;
-}}
-.quote-desc {{
-    font-size: 20px;
-    line-height: 1.6;
-    color: {_COLOR_SUB};
-    margin: 0;
-}}
-/* 引用行 — 左侧橙色边框 */
-.quote-line {{
-    border-left: 4px solid {_COLOR_ACCENT};
-    padding-left: 20px;
-    font-size: 22px;
-    line-height: 1.6;
-    color: {_COLOR_TEXT};
-    margin-top: 20px;
-}}
 /* 高亮框 */
 .highlight-box {{
     border-left: 4px solid {_COLOR_ACCENT};
     background: {_COLOR_ACCENT_BG};
-    border-radius: 0 8px 8px 0;
-    padding: 24px 28px;
-    font-size: 22px;
-    line-height: 1.6;
-    color: {_COLOR_TEXT};
-    margin-top: 24px;
-}}
-/* 提醒框 */
-.alert-box {{
-    background: {_COLOR_ACCENT_BG};
-    border: 1px solid #ffd7bc;
-    border-radius: 8px;
-    padding: 16px 20px;
-    font-size: 15px;
-    line-height: 1.6;
+    border-radius: 0 12px 12px 0;
+    padding: 22px 26px;
+    font-size: 28px;
+    line-height: 1.48;
     color: {_COLOR_TEXT};
     margin-top: 16px;
-}}
-.alert-box .alert-title {{
-    font-size: 16px;
-    font-weight: 600;
-    color: {_COLOR_ACCENT};
-    margin-bottom: 6px;
 }}
 """
 
@@ -202,140 +168,144 @@ def _orange_inline(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _render_cover(card: CardData) -> str:
-    """封面卡片 — 极简轻奢风：居中布局，大标题，装饰圆形，底部分割线+署名。
+    """封面卡片 — 杂志封面风。
 
-    设计原则：居中布局，标签在标题上方，副标题在标题下方，底部署名。
-    内容占满卡片75%空间，留白约25%。
+    设计语言：不对称布局，背景几何纹理，左下角日期胶囊，
+    超大标题居左，右侧装饰性几何元素，底部品牌签名。
     """
-    title_html = _orange_inline(card.title) if card.title else ""
+    title_html = _orange_inline(card.title.replace("\n", "<br>")) if card.title else ""
+    tag_text = card.subtitle or "AI DAILY DIGEST"
     return f"""\
 <div class="card" style="
-    align-items: center;
-    text-align: center;
-    padding: 56px 60px 48px;
+    padding: 0;
+    background: linear-gradient(160deg, #ffffff 60%, {_COLOR_ACCENT_BG} 100%);
 ">
-    <!-- 装饰圆形：右上角双层 -->
+    <!-- 背景几何纹理 -->
     <div style="
-        position: absolute; top: -120px; right: -80px;
-        width: 500px; height: 500px;
-        background: {_COLOR_COVER_CIRCLE};
-        border-radius: 50%;
+        position: absolute; top: 0; right: 0;
+        width: 400px; height: 400px;
+        background: radial-gradient(circle at center, {_COLOR_COVER_PATTERN} 0%, transparent 70%);
         z-index: 0;
     "></div>
     <div style="
-        position: absolute; top: 80px; right: 60px;
+        position: absolute; top: 60px; right: 80px;
         width: 200px; height: 200px;
-        background: {_COLOR_ACCENT_BG};
+        border: 3px solid {_COLOR_COVER_PATTERN};
         border-radius: 50%;
         z-index: 0;
     "></div>
-    <!-- 内容区域：垂直分布 -->
+    <div style="
+        position: absolute; bottom: 180px; right: 40px;
+        width: 120px; height: 120px;
+        border: 2px solid {_COLOR_COVER_PATTERN};
+        border-radius: 50%;
+        z-index: 0;
+    "></div>
+    <!-- 内容区域 -->
     <div style="
         position: relative; z-index: 1;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        text-align: center;
-        width: 100%;
         height: 100%;
+        padding: 48px 56px 38px;
     ">
-        <!-- 标签：圆角胶囊 -->
+        <!-- 左上角日期胶囊 -->
         <div style="
-            display: inline-block;
-            padding: 10px 24px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
             background: {_COLOR_ACCENT};
             color: #ffffff;
             border-radius: 24px;
             font-size: 18px;
             font-weight: 600;
-            letter-spacing: 2px;
-            margin-top: 80px;
-            width: fit-content;
-        ">AI DAILY DIGEST</div>
-        <!-- 弹性空间：标题前 -->
-        <div style="flex: 1;"></div>
-        <!-- 大标题：居中超大号 -->
-        <div style="
-            font-size: 64px;
-            font-weight: 700;
-            line-height: 1.15;
-            color: {_COLOR_TEXT};
-            margin: 0 40px;
-            max-width: 700px;
-            letter-spacing: -0.5px;
-        ">{title_html}</div>
-        <!-- 弹性空间：标题后 -->
-        <div style="flex: 1;"></div>
-        <!-- 副标题 -->
-        <div style="
-            font-size: 24px;
-            line-height: 1.6;
-            color: {_COLOR_SUB};
-            margin: 0 0 40px;
-            max-width: 600px;
-            font-weight: 400;
-        ">{card.subtitle}</div>
-        <!-- 日期 -->
-        <div style="
-            font-size: 18px;
-            color: {_COLOR_LIGHT};
             letter-spacing: 1px;
-            margin-bottom: 32px;
-        ">{card.body}</div>
-        <!-- 底部分割线 -->
+            width: fit-content;
+        ">{tag_text}</div>
+        <!-- 弹性空间 -->
+        <div style="flex: 1;"></div>
+        <!-- 超大标题 -->
         <div style="
-            width: 48px; height: 4px;
-            background: {_COLOR_ACCENT};
-            border-radius: 2px;
-            margin-bottom: 16px;
-        "></div>
-        <!-- 底部公众号署名 -->
+            font-size: 84px;
+            font-weight: 800;
+            line-height: 1.08;
+            color: {_COLOR_TEXT};
+            max-width: 680px;
+            letter-spacing: -1px;
+        ">{title_html}</div>
+        <!-- 副标题/body -->
+        {f'''<div style="
+            font-size: 30px;
+            color: {_COLOR_SUB};
+            margin-top: 22px;
+            max-width: 680px;
+            line-height: 1.42;
+        ">{card.body}</div>''' if card.body else ''}
+        <!-- 底部品牌签名 -->
         <div style="
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 16px;
-            color: {_COLOR_SUB};
-            margin-bottom: 24px;
+            gap: 10px;
+            margin-top: 34px;
         ">
             <div style="
-                width: 10px; height: 10px;
-                border-radius: 50%;
-                background: {_COLOR_WECHAT_GREEN};
+                width: 32px; height: 3px;
+                background: {_COLOR_ACCENT};
+                border-radius: 2px;
             "></div>
-            <span>{card.footer_note or "AI 开发者日报"}</span>
+            <div style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 16px;
+                color: {_COLOR_SUB};
+            ">
+                <div style="
+                    width: 8px; height: 8px;
+                    border-radius: 50%;
+                    background: {_COLOR_WECHAT_GREEN};
+                "></div>
+                <span>{card.footer_note or "AI 开发者日报"}</span>
+            </div>
         </div>
     </div>
 </div>"""
 
 
 def _render_content(card: CardData) -> str:
-    """内容卡片 — 编号 + 标题 + 橙色分隔条 + 正文要点 + 引用框。"""
+    """内容卡片 — 编辑部风格。
+
+    设计语言：左对齐大标题，橙色分隔条，正文区域充裕，
+    右上角装饰页码，底部高亮框（如有），底栏签名。
+    """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
-    quote_box = ""
-    if card.highlight_text:
-        quote_box = f'<div class="quote-box"><div class="quote-title">重点</div><div class="quote-desc">{card.highlight_text}</div></div>'
     body_html = _orange_inline(card.body) if card.body else ""
+    highlight = ""
+    if card.highlight_text:
+        highlight = f'<div class="highlight-box">{card.highlight_text}</div>'
     return f"""\
 <div class="card">
     {card_num}
+    <!-- 标题区 -->
     <h2 style="
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
         color: {_COLOR_TEXT};
-        margin: 0 0 16px;
-        position: relative; z-index: 1;
+        letter-spacing: -0.5px;
     ">{card.title}</h2>
     <div class="divider"></div>
+    <!-- 正文区 -->
     <div style="
-        font-size: 28px;
-        line-height: 1.8;
+        font-size: 34px;
+        line-height: 1.56;
         color: {_COLOR_TEXT};
-        position: relative; z-index: 1;
         flex: 1;
+        position: relative;
+        z-index: 1;
     ">{body_html}</div>
-    {quote_box}
+    {highlight}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
@@ -344,48 +314,59 @@ def _render_content(card: CardData) -> str:
 
 
 def _render_list(card: CardData) -> str:
-    """列表卡片 — 编号 + 标题 + 分隔条 + 大步骤圆圈列表 + 引用行。"""
+    """列表卡片 — 时间轴风。
+
+    设计语言：左侧竖线 + 圆点连接，右侧内容垂直流动。
+    每个条目是一个节点，橙色圆点标记序号，下方连接竖线。
+    适合流程、要点列表、分步骤说明。
+    """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
     items_html = ""
-    for idx, item in enumerate(card.items, 1):
+    total = min(len(card.items), 5)
+    for idx, item in enumerate(card.items[:5], 1):
         keyword = item.get("keyword", "")
         desc = item.get("desc", "")
+        is_last = idx == total
+        connector = "" if is_last else f'<div style="width:3px; flex:1; background:linear-gradient(to bottom, {_COLOR_ACCENT}, {_COLOR_ACCENT_BG}); margin-top:8px;"></div>'
         items_html += f"""\
-<div style="display: flex; gap: 24px; margin-bottom: 28px; align-items: flex-start;">
-    <div style="
-        width: 48px; height: 48px;
-        border-radius: 50%;
-        background: {_COLOR_ACCENT};
-        color: #ffffff;
-        font-size: 24px;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    ">{idx}</div>
-    <div style="flex: 1;">
-        <div style="font-size: 28px; font-weight: 700; color: {_COLOR_TEXT}; line-height: 1.3;">{keyword}</div>
-        <div style="font-size: 22px; color: {_COLOR_SUB}; line-height: 1.6; margin-top: 8px;">{desc}</div>
+<div style="display: flex; gap: 22px; align-items: stretch;">
+    <!-- 左侧时间轴 -->
+    <div style="display: flex; flex-direction: column; align-items: center; width: 40px; flex-shrink: 0;">
+        <div style="
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: {_COLOR_ACCENT};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(255,107,33,0.3);
+        ">{idx}</div>
+        {connector}
+    </div>
+    <!-- 右侧内容 -->
+    <div style="flex: 1; padding-bottom: {28 if not is_last else 0}px;">
+        <div style="font-size: 34px; font-weight: 800; color: {_COLOR_TEXT}; line-height: 1.18;">{keyword}</div>
+        <div style="font-size: 26px; color: {_COLOR_SUB}; line-height: 1.46; margin-top: 8px;">{desc}</div>
     </div>
 </div>"""
-    quote = ""
-    if card.body:
-        quote = f'<div class="quote-line">{card.body}</div>'
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
     return f"""\
 <div class="card">
     {card_num}
     <h2 style="
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
         color: {_COLOR_TEXT};
-        margin: 0 0 16px;
-        position: relative; z-index: 1;
+        letter-spacing: -0.5px;
     ">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1;">{items_html}</div>
-    {quote}
+    {body_html}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
@@ -394,47 +375,81 @@ def _render_list(card: CardData) -> str:
 
 
 def _render_data(card: CardData) -> str:
-    """数据卡片 — 编号 + 标题 + 分隔条 + 超大数字 + 标签 + 引用行。"""
+    """数据卡片 — 仪表盘风。
+
+    设计语言：网格卡片布局，强调数据视觉层次。
+    数据值超大号居中，标签置于下方，可选多个数据点（items）。
+    """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
-    subtitle_html = ""
-    if card.subtitle:
-        subtitle_html = f'<div style="font-size:24px; color:{_COLOR_SUB}; margin-top:16px;">{card.subtitle}</div>'
+    
+    # 主数据块
     data_block = ""
     if card.data_value:
         data_block = f"""\
-<div style="text-align: center; padding: 48px 0; margin: 32px 0;">
+<div style="
+    text-align: center;
+    padding: 58px 0;
+    margin: 18px 0;
+    background: {_COLOR_QUOTE_BG};
+    border-radius: 20px;
+">
     <div style="
-        font-size: 120px;
-        font-weight: 700;
+        font-size: 156px;
+        font-weight: 800;
         color: {_COLOR_ACCENT};
         line-height: 1;
-        margin-bottom: 16px;
+        letter-spacing: -3px;
     ">{card.data_value}</div>
     <div style="
-        font-size: 28px;
+        font-size: 30px;
         color: {_COLOR_SUB};
+        margin-top: 12px;
+        font-weight: 500;
     ">{card.data_label}</div>
 </div>"""
-
-    quote = ""
-    if card.body:
-        quote = f'<div class="quote-line">{card.body}</div>'
-
+    
+    # 附加数据点（网格）
+    extra_data = ""
+    if card.items:
+        cells = ""
+        for item in card.items[:4]:
+            cells += f"""\
+<div style="
+    background: {_COLOR_QUOTE_BG};
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+">
+    <div style="font-size: 48px; font-weight: 800; color: {_COLOR_ACCENT};">{item.get('value', '')}</div>
+    <div style="font-size: 23px; color: {_COLOR_SUB}; margin-top: 8px; line-height: 1.35;">{item.get('label', '')}</div>
+</div>"""
+        extra_data = f"""\
+<div style="
+    display: grid;
+    grid-template-columns: repeat({min(len(card.items), 2)}, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+    position: relative; z-index: 1;
+">{cells}</div>"""
+    
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
+    
     return f"""\
 <div class="card">
     {card_num}
     <h2 style="
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
         color: {_COLOR_TEXT};
-        margin: 0 0 16px;
-        position: relative; z-index: 1;
+        letter-spacing: -0.5px;
     ">{card.title}</h2>
     <div class="divider"></div>
-    {subtitle_html}
-    {data_block}
-    {quote}
+    <div style="position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        {data_block}
+        {extra_data}
+    </div>
+    {body_html}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
@@ -443,7 +458,11 @@ def _render_data(card: CardData) -> str:
 
 
 def _render_compare(card: CardData) -> str:
-    """对比卡片 — 编号 + 标题 + 分隔条 + 大对比行。"""
+    """对比卡片 — 对决风。
+
+    设计语言：双栏/多行对决布局，橙色高亮胜出项，
+    每行左侧名称 + 右侧数值，背景色区分高下。
+    """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
     rows_html = ""
     for item in card.items:
@@ -452,52 +471,51 @@ def _render_compare(card: CardData) -> str:
         value = item.get("value", "")
         desc = item.get("desc", "")
         is_highlight = item.get("highlight", "") == "true"
-        bg = _COLOR_ACCENT_BG if is_highlight else _COLOR_QUOTE_BG
+        bg = "linear-gradient(135deg, {_COLOR_ACCENT_BG}, #fff8f0)".format_map({"_COLOR_ACCENT_BG": _COLOR_ACCENT_BG}) if is_highlight else _COLOR_QUOTE_BG
+        border = f"2px solid {_COLOR_ACCENT}" if is_highlight else "2px solid transparent"
         name_color = _COLOR_ACCENT if is_highlight else _COLOR_TEXT
         tag_html = (
-            f'<span style="font-size:16px; padding:4px 14px; border-radius:6px; '
-            f'background:{_COLOR_ACCENT}; color:#fff; font-weight:600; margin-left:12px;">'
+            f'<span style="font-size:14px; padding:4px 12px; border-radius:20px; '
+            f'background:{_COLOR_ACCENT}; color:#fff; font-weight:700; margin-left:12px;">'
             f'{tag}</span>' if tag else ""
         )
-        desc_html = f'<div style="font-size:20px; color:{_COLOR_SUB}; margin-top:6px;">{desc}</div>' if desc else ""
+        desc_html = f'<div style="font-size:24px; color:{_COLOR_SUB}; line-height:1.35; margin-top:6px;">{desc}</div>' if desc else ""
         rows_html += f"""\
 <div style="
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 24px 28px;
-    border-radius: 12px;
+    padding: 25px 28px;
+    border-radius: 16px;
     background: {bg};
+    border: {border};
     margin-bottom: 16px;
 ">
     <div>
         <div style="display: flex; align-items: center;">
-            <span style="font-size: 28px; font-weight: 700; color: {name_color};">{name}</span>
+            <span style="font-size: 34px; font-weight: 800; color: {name_color}; line-height: 1.16;">{name}</span>
             {tag_html}
         </div>
         {desc_html}
     </div>
-    <div style="font-size: 36px; font-weight: 700; color: {_COLOR_ACCENT};">{value}</div>
+    <div style="font-size: 48px; font-weight: 800; color: {_COLOR_ACCENT}; line-height: 1;">{value}</div>
 </div>"""
 
-    quote = ""
-    if card.body:
-        quote = f'<div class="quote-line">{card.body}</div>'
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
 
     return f"""\
 <div class="card">
     {card_num}
     <h2 style="
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
         color: {_COLOR_TEXT};
-        margin: 0 0 16px;
-        position: relative; z-index: 1;
+        letter-spacing: -0.5px;
     ">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1;">{rows_html}</div>
-    {quote}
+    {body_html}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
@@ -506,8 +524,107 @@ def _render_compare(card: CardData) -> str:
 
 
 def _render_closing(card: CardData) -> str:
-    """结尾卡片 — 标题 + 正文 + 高亮引导框。字大醒目。"""
+    """结尾卡片 — 品牌收尾风。
+
+    设计语言：大引言居中，品牌签名，行动号召。
+    视觉上给人"结束但期待下一期"的感觉。
+    """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
+    body_html = _orange_inline(card.body.replace("\n", "<br>")) if card.body else ""
+    highlight = ""
+    if card.highlight_text:
+        highlight = f'<div class="highlight-box" style="max-width: 680px;">{card.highlight_text}</div>'
+
+    return f"""\
+<div class="card" style="align-items: center; text-align: center;">
+    {card_num}
+    <!-- 装饰：顶部渐变 -->
+    <div style="
+        position: absolute; top: 0; left: 0; right: 0;
+        height: 6px;
+        background: linear-gradient(90deg, {_COLOR_ACCENT}, {_COLOR_COVER_GRADIENT_START});
+        border-radius: 24px 24px 0 0;
+    "></div>
+    <!-- 内容 -->
+    <div style="
+        position: relative; z-index: 1;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 0;
+    ">
+        <h2 style="
+            font-size: 54px;
+            font-weight: 800;
+            line-height: 1.16;
+            color: {_COLOR_TEXT};
+            max-width: 700px;
+            letter-spacing: -0.5px;
+        ">{card.title}</h2>
+        <div style="
+            width: 48px; height: 4px;
+            background: {_COLOR_ACCENT};
+            border-radius: 2px;
+            margin: 24px 0;
+        "></div>
+        <div style="
+            font-size: 32px;
+            line-height: 1.48;
+            color: {_COLOR_SUB};
+            max-width: 720px;
+        ">{body_html}</div>
+        {highlight}
+    </div>
+    <!-- 底部品牌 -->
+    <div style="
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 16px;
+        color: {_COLOR_LIGHT};
+        position: relative;
+        z-index: 1;
+    ">
+        <div style="
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: {_COLOR_WECHAT_GREEN};
+        "></div>
+        <span>{card.footer_note or "AI 开发者日报"}</span>
+    </div>
+</div>"""
+
+
+def _render_content_grid(card: CardData) -> str:
+    """四宫格卡片 — 网格仪表盘风。
+
+    2×2 网格展示 4 个并列要点，每格一个数据/标签/说明。
+    items 格式: [{"label": "标题", "value": "数值/关键词", "desc": "说明"}]
+    """
+    card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
+    grid_cells = ""
+    for idx, item in enumerate(card.items[:4]):
+        label = item.get("label", "")
+        value = item.get("value", "")
+        desc = item.get("desc", "")
+        grid_cells += f"""\
+<div style="
+    background: {_COLOR_QUOTE_BG};
+    border-radius: 20px;
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    min-height: 260px;
+">
+    <div style="font-size: 23px; color: {_COLOR_LIGHT}; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 12px;">{label}</div>
+    <div style="font-size: 58px; font-weight: 800; color: {_COLOR_ACCENT}; line-height: 1.05; letter-spacing: -1px;">{value}</div>
+    <div style="font-size: 25px; color: {_COLOR_SUB}; line-height: 1.36; margin-top: 12px;">{desc}</div>
+</div>"""
+
     highlight = ""
     if card.highlight_text:
         highlight = f'<div class="highlight-box">{card.highlight_text}</div>'
@@ -516,22 +633,203 @@ def _render_closing(card: CardData) -> str:
 <div class="card">
     {card_num}
     <h2 style="
-        font-size: 48px;
-        font-weight: 700;
-        line-height: 1.2;
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
         color: {_COLOR_TEXT};
-        margin: 0 0 12px;
-        position: relative; z-index: 1;
+        letter-spacing: -0.5px;
     ">{card.title}</h2>
     <div class="divider"></div>
     <div style="
-        font-size: 26px;
-        line-height: 1.7;
-        color: {_COLOR_SUB};
+        position: relative; z-index: 1; flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 16px;
+    ">{grid_cells}</div>
+    {highlight}
+    <div class="footer">
+        <div class="green-dot"></div>
+        <span>{card.footer_note or "AI 开发者日报"}</span>
+    </div>
+</div>"""
+
+
+def _render_content_hero(card: CardData) -> str:
+    """大字报卡片 — 冲击力表达。
+
+    超大数字或关键词居中聚焦，适合关键数据/判断的强调。
+    data_value: 超大数字，data_label: 说明，body: 补充文字。
+    """
+    card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
+    hero_value = ""
+    if card.data_value:
+        hero_value = f"""\
+<div style="
+    font-size: 156px;
+    font-weight: 800;
+    color: {_COLOR_ACCENT};
+    line-height: 1;
+    letter-spacing: -3px;
+">{card.data_value}</div>"""
+    elif card.body:
+        hero_value = f"""\
+<div style="
+    font-size: 66px;
+    font-weight: 800;
+    color: {_COLOR_TEXT};
+    line-height: 1.3;
+    max-width: 680px;
+    letter-spacing: -1px;
+">{_orange_inline(card.body.replace(chr(10), '<br>'))}</div>"""
+
+    label_html = f'<div style="font-size: 30px; color: {_COLOR_SUB}; margin-top: 16px; line-height: 1.35;">{card.data_label}</div>' if card.data_label else ""
+    subtitle_html = f'<div style="font-size: 26px; color: {_COLOR_LIGHT}; margin-top: 24px; max-width: 680px; line-height: 1.42;">{card.subtitle}</div>' if card.subtitle else ""
+    highlight = f'<div class="highlight-box" style="max-width: 600px; margin-top: 32px;">{card.highlight_text}</div>' if card.highlight_text else ""
+
+    return f"""\
+<div class="card" style="align-items: center; text-align: center;">
+    {card_num}
+    <h2 style="
+        font-size: 42px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: {_COLOR_TEXT};
+    ">{card.title}</h2>
+    <div class="divider" style="margin: 12px auto 24px;"></div>
+    <div style="
         position: relative; z-index: 1;
         flex: 1;
-    ">{card.body}</div>
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    ">
+        {hero_value}
+        {label_html}
+        {subtitle_html}
+        {highlight}
+    </div>
+    <div class="footer">
+        <div class="green-dot"></div>
+        <span>{card.footer_note or "AI 开发者日报"}</span>
+    </div>
+</div>"""
+
+
+def _render_content_steps(card: CardData) -> str:
+    """步骤流卡片 — 竖向时间轴/流程。
+
+    左侧竖线 + 编号圆点，右侧内容。适合流程、时间线。
+    items 格式: [{"label": "步骤标题", "desc": "说明"}]
+    """
+    card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
+    steps_html = ""
+    total = min(len(card.items), 5)
+    for idx, item in enumerate(card.items[:5], 1):
+        label = item.get("label", "")
+        desc = item.get("desc", "")
+        is_last = idx == total
+        connector = "" if is_last else f'<div style="width:3px; flex:1; background:linear-gradient(to bottom, {_COLOR_ACCENT}, {_COLOR_ACCENT_BG}); margin-top:8px;"></div>'
+        steps_html += f"""\
+<div style="display: flex; gap: 22px; align-items: stretch;">
+    <div style="display: flex; flex-direction: column; align-items: center; width: 36px; flex-shrink: 0;">
+        <div style="
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: {_COLOR_ACCENT};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(255,107,33,0.3);
+        ">{idx}</div>
+        {connector}
+    </div>
+    <div style="flex: 1; padding-bottom: {28 if not is_last else 0}px;">
+        <div style="font-size: 34px; font-weight: 800; color: {_COLOR_TEXT}; line-height: 1.18;">{label}</div>
+        <div style="font-size: 26px; color: {_COLOR_SUB}; line-height: 1.46; margin-top: 8px;">{desc}</div>
+    </div>
+</div>"""
+
+    highlight = f'<div class="highlight-box">{card.highlight_text}</div>' if card.highlight_text else ""
+
+    return f"""\
+<div class="card">
+    {card_num}
+    <h2 style="
+        font-size: 50px;
+        font-weight: 800;
+        line-height: 1.14;
+        color: {_COLOR_TEXT};
+        letter-spacing: -0.5px;
+    ">{card.title}</h2>
+    <div class="divider"></div>
+    <div style="position: relative; z-index: 1; flex: 1;">{steps_html}</div>
     {highlight}
+    <div class="footer">
+        <div class="green-dot"></div>
+        <span>{card.footer_note or "AI 开发者日报"}</span>
+    </div>
+</div>"""
+
+
+def _render_content_quote(card: CardData) -> str:
+    """引言卡片 — 名言/观点聚焦。
+
+    大引言居中，来源署名，适合关键判断、观点表达。
+    body: 主引言，subtitle: 来源，highlight_text: 补充说明。
+    """
+    card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
+    quote_text = _orange_inline(card.body.replace("\n", "<br>")) if card.body else ""
+    source_html = f'<div style="font-size: 25px; color: {_COLOR_LIGHT}; margin-top: 22px; font-style: italic;">— {card.subtitle}</div>' if card.subtitle else ""
+    highlight = f'<div class="highlight-box" style="max-width: 600px;">{card.highlight_text}</div>' if card.highlight_text else ""
+
+    return f"""\
+<div class="card" style="align-items: center; text-align: center;">
+    {card_num}
+    <h2 style="
+        font-size: 42px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: {_COLOR_TEXT};
+    ">{card.title}</h2>
+    <div class="divider" style="margin: 12px auto 24px;"></div>
+    <div style="
+        position: relative; z-index: 1;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    ">
+        <div style="
+            font-size: 84px;
+            color: {_COLOR_ACCENT};
+            line-height: 1;
+            margin-bottom: -16px;
+            font-family: Georgia, serif;
+            opacity: 0.3;
+        ">"</div>
+        <div style="
+            font-size: 48px;
+            font-weight: 600;
+            line-height: 1.34;
+            color: {_COLOR_TEXT};
+            max-width: 720px;
+            letter-spacing: 0.5px;
+        ">{quote_text}</div>
+        {source_html}
+        <div style="
+            width: 48px; height: 3px;
+            background: {_COLOR_ACCENT};
+            border-radius: 2px;
+            margin-top: 28px;
+        "></div>
+        {highlight}
+    </div>
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
@@ -546,6 +844,10 @@ _RENDERERS: dict[str, Any] = {
     "data": _render_data,
     "compare": _render_compare,
     "closing": _render_closing,
+    "content-grid": _render_content_grid,
+    "content-hero": _render_content_hero,
+    "content-steps": _render_content_steps,
+    "content-quote": _render_content_quote,
 }
 
 

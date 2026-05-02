@@ -135,13 +135,14 @@ filtered = deduper.filter(items)
 print(f"Dedup: {len(items)} → {len(filtered)} items")
 ```
 
-### Step 3: AI Time Filtering (REQUIRED)
+### Step 3: AI Time Filtering (REQUIRED) — 仅保留当日和前一日
 
 **Before any analysis, filter by date.** This is your single biggest source of error.
 
-- Discard items older than **3 days** (`published_at` < today - 3d). They are not "today's news."
-- If you choose to include an older item (for context/background), **explicitly note its date** in the article.
-- Tip: tools like `webfetch` can be used to check an article's actual publish date if the `published_at` field looks wrong.
+- **只保留今日和昨日的新闻** (`published_at` >= today - 1d)。昨日之前的新闻一律丢弃，它们不是"今日新闻"。
+- **绝对不用超过 48 小时的内容**。宁可少写，不可写旧。
+- 如果必须引用昨日之前的新闻作为背景，**必须在文章中明确标注日期**。
+- ⚠️ 工具脚本抓取的 `published_at` 可能是采集时间而非原文发布时间，需用 `webfetch` 打开原文核实实际发布日期。
 
 ### Step 4: AI Search & Verify (REQUIRED)
 
@@ -186,31 +187,130 @@ You write it. Constraints:
 
 **Option B: Create card data（贴图/newspic）**
 
-Create `data/cards.json` — an array of card objects. Card types: `cover` | `content` | `list` | `data` | `compare` | `closing`
+Create `data/cards.json` — an array of card objects. Card types: `cover` | `content` | `list` | `data` | `compare` | `closing` | `content-grid` | `content-hero` | `content-steps` | `content-quote`
 
+**封面卡片 (cover)** — 杂志封面风，不对称布局，背景几何纹理
 ```json
-[
-  {
-    "card_type": "cover",
-    "title": "今日 AI 热点",
-    "subtitle": "AI DAILY DIGEST",
-    "body": "2026.05.01",
-    "footer_note": "AI 开发者日报"
-  },
-  {
-    "card_type": "content",
-    "page_num": 1,
-    "title": "重点新闻",
-    "body": "正文内容...",
-    "highlight_text": "关键信息"
-  },
-  {
-    "card_type": "closing",
-    "title": "今日总结",
-    "body": "一句话总结今天",
-    "highlight_text": "关注公众号获取每日更新"
-  }
-]
+{
+  "card_type": "cover",
+  "title": "GPT-5 发布\nDeepSeek 开源\nLlama 4 抢跑",
+  "subtitle": "AI 速递 · 2026.05.01",
+  "body": "",
+  "footer_note": "AI 开发者日报"
+}
+```
+
+**正文卡片 (content)** — 编辑部风格，标题+分隔条+正文
+```json
+{
+  "card_type": "content",
+  "page_num": 1,
+  "title": "重点新闻",
+  "body": "正文内容...",
+  "highlight_text": "关键信息"
+}
+```
+
+**列表卡片 (list)** — 时间轴风，左侧竖线+圆点连接
+```json
+{
+  "card_type": "list",
+  "page_num": 2,
+  "title": "今日要点",
+  "items": [
+    {"keyword": "要点标题", "desc": "详细说明"},
+    {"keyword": "要点二", "desc": "详细说明"}
+  ],
+  "body": "底部引用行（可选）"
+}
+```
+
+**数据卡片 (data)** — 仪表盘风，超大数字+网格卡片
+```json
+{
+  "card_type": "data",
+  "page_num": 3,
+  "title": "数据亮点",
+  "data_value": "1200%",
+  "data_label": "下载量增长",
+  "body": "底部说明（可选）"
+}
+```
+
+**对比卡片 (compare)** — 对决风，双栏对比+高亮
+```json
+{
+  "card_type": "compare",
+  "page_num": 4,
+  "title": "模型对比",
+  "items": [
+    {"name": "GPT-5", "tag": "最强", "value": "98分", "highlight": "true"},
+    {"name": "DeepSeek", "value": "95分"}
+  ]
+}
+```
+
+**结尾卡片 (closing)** — 品牌收尾风，大引言+行动号召
+```json
+{
+  "card_type": "closing",
+  "title": "今日总结",
+  "body": "一句话总结今天",
+  "highlight_text": "关注公众号获取每日更新"
+}
+```
+
+**四宫格卡片 (content-grid)** — 网格仪表盘风，2×2 并列要点
+```json
+{
+  "card_type": "content-grid",
+  "page_num": 5,
+  "title": "四大模型对比",
+  "items": [
+    {"label": "GPT-5", "value": "最强", "desc": "推理能力顶级"},
+    {"label": "DeepSeek", "value": "开源", "desc": "性能接近闭源"},
+    {"label": "Qwen3", "value": "中文", "desc": "中文理解最佳"},
+    {"label": "Llama4", "value": "轻量", "desc": "部署成本最低"}
+  ]
+}
+```
+
+**大字报卡片 (content-hero)** — 冲击力表达，超大数字/关键词居中
+```json
+{
+  "card_type": "content-hero",
+  "page_num": 6,
+  "title": "关键数据",
+  "data_value": "98%",
+  "data_label": "准确率提升",
+  "body": "补充说明（可选）"
+}
+```
+
+**步骤流卡片 (content-steps)** — 竖向时间轴/流程
+```json
+{
+  "card_type": "content-steps",
+  "page_num": 7,
+  "title": "技术演进",
+  "items": [
+    {"label": "第一阶段", "desc": "基础模型"},
+    {"label": "第二阶段", "desc": "能力提升"},
+    {"label": "第三阶段", "desc": "应用落地"}
+  ]
+}
+```
+
+**引言卡片 (content-quote)** — 名言/观点聚焦
+```json
+{
+  "card_type": "content-quote",
+  "page_num": 8,
+  "title": "行业观点",
+  "body": "AI 将改变一切",
+  "subtitle": "某专家",
+  "highlight_text": "补充说明（可选）"
+}
 ```
 
 ### Step 7: Generate Cards (贴图 Only)
@@ -305,7 +405,7 @@ The webapp lets you preview the rendered HTML, edit markdown, and publish. But t
 
 ## Quality Notes
 
-- **时效性是生命线。** 日报不是周报，超过 3 天的新闻必须标记日期或干脆不用。
+- **时效性是生命线。** 日报不是周报，**只写今日和昨日的新闻**，超过 48 小时的内容一律不用。
 - **验证，不要转载。** 每条重要新闻都要打开原文确认标题、日期、关键数据。从搜索补进的新闻也要打开原文核实。
 - **搜索是 agent 的职责。** 工具脚本抓不到的东西，你去搜。网络超时、403、DNS 失败是常态，不是放弃的理由。
 - Be accurate. Don't fabricate facts, figures, or links.
