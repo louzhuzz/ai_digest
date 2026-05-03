@@ -1,22 +1,27 @@
-# ai_digest/tool_run.py — Sisyphus 可调用的工具脚本 CLI
 # -*- coding: utf-8 -*-
-#
-# 用法:
-#   python -m ai_digest.tool_run collect                    # 收集全部来源
-#   python -m ai_digest.tool_run dedup < items.json         # 去重（stdin→stdout）
-#   python -m ai_digest.tool_run persist < items.json       # 持久化去重状态
-#   cat article.md | python -m ai_digest.tool_run publish   # 发布公众号
-#   python -m ai_digest.tool_run cover --title x --out x    # 生成封面图
-#   python -m ai_digest.tool_run cards --input cards.json --output-dir data/cards
+"""
+ai_digest/tool_run.py — Sisyphus 可调用的工具脚本 CLI
+
+用法:
+  python -m ai_digest.tool_run collect                    # 收集全部来源
+  python -m ai_digest.tool_run dedup < items.json         # 去重（stdin→stdout）
+  python -m ai_digest.tool_run persist < items.json       # 持久化去重状态
+  cat article.md | python -m ai_digest.tool_run publish   # 发布公众号
+  python -m ai_digest.tool_run cover --title x --out x    # 生成封面图
+  python -m ai_digest.tool_run cards --input cards.json --output-dir data/cards
+
+新引入 content_hash 字段（64-bit simhash），用于近似去重。
+"""
 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import glob as glob_mod
 import json
 import os
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 
 # cards 子命令在 cmd_cards 中延迟导入 image_card_generator
@@ -26,6 +31,7 @@ from .defaults import build_default_collector, build_default_publisher
 from .dedupe import RecentDedupeFilter
 from .models import DigestItem
 from .settings import load_settings
+from .simhash_utils import compute_text_simhash
 from .state_store import SqliteStateStore
 
 
@@ -46,17 +52,16 @@ def _deserialize_item(d: dict) -> DigestItem:
 
 
 def _json_dump(obj, fp) -> None:
-    # Windows: ensure UTF-8 to console / file pipe
-    if hasattr(fp, "reconfigure"):
-        try:
-            fp.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+    # 强制使用 UTF-8 编码写入文件，避免 Windows PowerShell 管道引入 BOM 或错误编码
     json.dump(obj, fp, ensure_ascii=False, default=str)
 
 
 def _json_load(fp) -> list:
-    return json.load(fp)
+    # 始终使用二进制模式读取，然后用 UTF-8 解码（避免 Windows 文本模式干扰）
+    content = fp.read()
+    if isinstance(content, str):
+        return json.loads(content)
+    return json.loads(content.decode("utf-8"))
 
 
 # ── access token 辅助 ────────────────────────────────────
@@ -79,12 +84,44 @@ def _get_access_token(settings) -> str:
 # ── 子命令实现 ──────────────────────────────────────────
 
 def cmd_collect() -> None:
-    """收集全部来源的热点数据，输出 JSON 到 stdout。"""
+    """收集全部来源的热点数据，输出 JSON 到 stdout 和 data/items_collected.json。"""
+    settings = load_settings()
     collector = build_default_collector()
     items = collector.collect()
+
+    # 来源分级过滤：HIGH 全量保留；MEDIUM 需命中关键词（或默认 AI 关键词）
+    from .collectors.keywords import HIGH_PRIORITY_SOURCES, filter_by_keywords
+
+    # 默认 AI 相关关键词（keywords 未配置时使用）
+    default_keywords = ("AI", "人工智能", "大模型", "LLM", "开源", "模型", "GPT", "DeepSeek", "发布", "训练")
+    keywords = settings.keywords if settings.keywords else default_keywords
+
+    high_priority = [i for i in items if i.source in HIGH_PRIORITY_SOURCES]
+    medium_priority = [i for i in items if i.source not in HIGH_PRIORITY_SOURCES]
+    medium_filtered = filter_by_keywords(medium_priority, keywords, require_keywords_for_medium=True)
+
+    # 为每个 item 计算 content_hash（simhash 指纹）
+    final_items: list[DigestItem] = []
+    for item in high_priority + medium_filtered:
+        content_hash = compute_text_simhash(item.title, item.summary)
+        final_items.append(replace(item, content_hash=content_hash))
+    items = final_items
+
     if collector.errors:
-        print("收集器错误:", "; ".join(collector.errors), file=sys.stderr)
-    _json_dump([_serialize_item(item) for item in items], sys.stdout)
+        err_msg = "; ".join(collector.errors)
+        sys.stderr.buffer.write(err_msg.encode("utf-8", errors="replace") + b"\n")
+
+    # 写入文件（可靠），同时输出到 stdout
+    output = json.dumps([_serialize_item(item) for item in items], ensure_ascii=False, default=str)
+    output_bytes = output.encode("utf-8")
+
+    # 写文件
+    out_path = Path("data/items_collected.json")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(output_bytes)
+
+    # 同时写 stdout buffer（绕过文本模式编码问题）
+    sys.stdout.buffer.write(output_bytes)
 
 
 def cmd_dedup() -> None:
@@ -94,12 +131,14 @@ def cmd_dedup() -> None:
     store.initialize()
     deduper = RecentDedupeFilter(state_store=store)
 
-    raw_items = _json_load(sys.stdin)
+    # 始终使用二进制模式读取 stdin（避免 Windows GBK 文本模式破坏 UTF-8 数据）
+    raw_items = json.loads(sys.stdin.buffer.read())
     items = [_deserialize_item(item) for item in raw_items]
 
     now = datetime.now(timezone.utc)
     filtered = deduper.filter(items, now=now)
-    _json_dump([_serialize_item(item) for item in filtered], sys.stdout)
+    output = json.dumps([_serialize_item(item) for item in filtered], ensure_ascii=False, default=str)
+    sys.stdout.buffer.write(output.encode("utf-8"))
 
 
 def cmd_persist() -> None:
@@ -109,22 +148,99 @@ def cmd_persist() -> None:
     store.initialize()
     deduper = RecentDedupeFilter(state_store=store)
 
-    raw_items = _json_load(sys.stdin)
+    # 始终使用二进制模式读取 stdin
+    raw_items = json.loads(sys.stdin.buffer.read())
     items = [_deserialize_item(item) for item in raw_items]
 
     now = datetime.now(timezone.utc)
     deduper.persist(items, now=now)
 
 
+def cmd_compose() -> None:
+    """
+    从 stdin 读取已去重的 JSON items，生成 Markdown 日报，输出到 stdout。
+    不发布到草稿箱，只输出 Markdown 文本。
+    """
+    # 始终使用二进制模式读取 stdin
+    raw_items = json.loads(sys.stdin.buffer.read())
+    items = [_deserialize_item(item) for item in raw_items]
+    if not items:
+        print("# 今日 AI 开发者热点\n\n暂无热点数据。", file=sys.stdout)
+        return
+
+    # 按 source 分组
+    by_source: dict[str, list[DigestItem]] = {}
+    for item in items:
+        by_source.setdefault(item.source, []).append(item)
+
+    # 生成日报
+    today = datetime.now().strftime("%Y年%m月%d日")
+    lines = [f"# AI 开发者热点日报 — {today}\n"]
+
+    # 头条（得分最高 or 热度最高）
+    head_item = max(items, key=lambda i: (
+        i.score or 0,
+        i.metadata.get("hot_value", 0) or i.metadata.get("stars_growth", 0) or 0,
+    ))
+    lines.append(f"## 今日头条\n")
+    lines.append(f"### {head_item.title}\n")
+    lines.append(f"来源：{head_item.source} | ")
+    if head_item.metadata.get("hot_value"):
+        lines.append(f"热度：{head_item.metadata['hot_value']:,}")
+    elif head_item.metadata.get("stars_growth"):
+        lines.append(f"今日 star 增长：{head_item.metadata['stars_growth']}")
+    lines.append("\n")
+    if head_item.summary:
+        lines.append(f"{head_item.summary}\n")
+    lines.append(f"[查看原文]({head_item.url})\n")
+
+    # 各来源摘要
+    lines.append("\n## 热点速览\n")
+    source_order = ["GitHub Trending", "Hacker News", "Hugging Face", "Anthropic News",
+                    "Google AI / Gemini", "机器之心", "新智元", "量子位", "CSDN AI",
+                    "知乎热榜", "微博热搜"]
+    for src in source_order:
+        if src not in by_source:
+            continue
+        src_items = by_source[src]
+        lines.append(f"### {src}（{len(src_items)} 条）\n")
+        for item in src_items[:8]:  # 每来源最多 8 条
+            title = item.title[:60]
+            url = item.url
+            hot = ""
+            if item.metadata.get("hot_value"):
+                hot = f" 🔥{item.metadata['hot_value']:,}"
+            elif item.metadata.get("stars_growth"):
+                hot = f" ⭐+{item.metadata['stars_growth']}"
+            lines.append(f"- {title}{hot}\n")
+        lines.append("\n")
+
+    # 微博/知乎热榜（直接展示排名）
+    for src in ["微博热搜", "知乎热榜"]:
+        if src not in by_source:
+            continue
+        src_items = by_source[src]
+        lines.append(f"### {src}\n")
+        for item in src_items[:20]:
+            rank = item.metadata.get("rank", "?")
+            hot = item.metadata.get("hot_value", 0)
+            hot_str = f"{hot:,}" if hot else ""
+            lines.append(f"{rank}. {item.title} {hot_str}\n")
+        lines.append("\n")
+
+    lines.append("---\n*由 ai_digest 自动生成*\n")
+    print("".join(lines), file=sys.stdout)
+
+
 def cmd_publish(title: str, file_path: str | None = None) -> None:
     """从文件或 stdin 读取 Markdown，发布到公众号，输出 JSON 结果。
-    
+
     Args:
         title: 文章标题
         file_path: 可选，直接指定 markdown 文件路径（避免 PowerShell 管道编码问题）
     """
     settings = load_settings()
-    
+
     if file_path:
         # 直接从文件读取，使用 UTF-8 编码（避免 PowerShell 管道编码问题）
         with open(file_path, "r", encoding="utf-8") as f:
@@ -165,6 +281,7 @@ _COMMANDS = {
     "collect": ("收集多来源热点数据", cmd_collect),
     "dedup": ("跨运行去重（stdin → stdout JSON）", lambda: cmd_dedup()),
     "persist": ("持久化去重状态到 SQLite", lambda: cmd_persist()),
+    "compose": ("生成 Markdown 日报（stdin JSON → stdout Markdown）", lambda: cmd_compose()),
     "publish": ("发布公众号草稿（stdin markdown）", lambda: _publish_wrapper()),
     "cover": ("生成封面图", lambda: _cover_wrapper()),
     "cards": ("生成贴图卡片 PNG（从 JSON）", lambda: _cards_wrapper()),

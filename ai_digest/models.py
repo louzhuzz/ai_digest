@@ -16,6 +16,7 @@ class DigestItem:
     why_it_matters: str = ""
     score: float = 0.0
     dedupe_key: str = ""
+    content_hash: int = 0  # 64-bit simhash 指纹（标题+摘要），用于近似去重
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
