@@ -13,6 +13,7 @@ from urllib import parse, request
 from ..cover_image import generate_cover_image
 from ..http_client import DEFAULT_TIMEOUT_SECONDS
 from ..wechat_image_uploader import WeChatImageUploader
+from ..wechat_renderer import render as _render_md
 
 
 # ── WeChat 错误码分类 ─────────────────────────────────────
@@ -153,60 +154,7 @@ def _wx_render_image_line(line: str) -> str:
 
 def render_wechat_html(markdown: str) -> str:
     """将 Markdown 转换为微信公众号兼容的 HTML（内联样式）。"""
-    parts: list[str] = []
-    in_list = False
-    for raw_line in markdown.splitlines():
-        line = raw_line.rstrip()
-        if not line.strip():
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            continue
-        if line.startswith("![](") or _WX_IMAGE_PATTERN.match(line.strip()):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            img = _wx_render_image_line(line.strip())
-            if img:
-                parts.append(img)
-            continue
-        if line.startswith("# "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f'<p style="{_WX_H1_STYLE}"><strong>{_wx_render_inline(line[2:].strip())}</strong></p>')
-            continue
-        if line.startswith("## "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f'<p style="{_WX_H2_STYLE}"><strong>{_wx_render_inline(line[3:].strip())}</strong></p>')
-            continue
-        if line.startswith("### "):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f'<p style="{_WX_H3_STYLE}"><strong>{_wx_render_inline(line[4:].strip())}</strong></p>')
-            continue
-        if line.startswith("- "):
-            if not in_list:
-                parts.append('<ul style="margin:1em 0; padding-left:1.5em;">')
-                in_list = True
-            parts.append(f'<li style="margin-bottom:0.3em;">{_wx_render_inline(line[2:].strip())}</li>')
-            continue
-        if _WX_ORDERED_LIST.match(line.strip()):
-            if in_list:
-                parts.append("</ul>")
-                in_list = False
-            parts.append(f'<p style="{_WX_PARAGRAPH_STYLE}">{_wx_render_inline(line.strip())}</p>')
-            continue
-        if in_list:
-            parts.append("</ul>")
-            in_list = False
-        parts.append(f'<p style="{_WX_PARAGRAPH_STYLE}">{_wx_render_inline(line)}</p>')
-    if in_list:
-        parts.append("</ul>")
-    return "".join(parts)
+    return _render_md(markdown)
 
 
 def markdown_to_html(markdown: str) -> str:
