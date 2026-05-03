@@ -55,6 +55,7 @@ class AppSettings:
     draft_mode: bool
     llm_enabled: bool
     state_db_path: Path = Path("data/state.db")
+    keywords: tuple[str, ...] = ()  # 监控关键词列表，逗号分隔
 
 
 def load_settings(environ: dict[str, str] | None = None) -> AppSettings:
@@ -85,6 +86,8 @@ def load_settings(environ: dict[str, str] | None = None) -> AppSettings:
         else None
     )
     state_db_path = Path(env.get("AI_DIGEST_STATE_DB", "data/state.db"))
+    keywords_raw = env.get("AI_DIGEST_KEYWORDS", "").strip()
+    keywords = tuple(k.strip() for k in keywords_raw.split(",") if k.strip())
     llm_enabled = bool(ark_api_key and ark_base_url and ark_model)
     return AppSettings(
         wechat=wechat,
@@ -93,4 +96,5 @@ def load_settings(environ: dict[str, str] | None = None) -> AppSettings:
         draft_mode=draft_mode,
         llm_enabled=llm_enabled,
         state_db_path=state_db_path,
+        keywords=keywords,
     )
