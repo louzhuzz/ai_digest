@@ -15,6 +15,106 @@ from ..http_client import DEFAULT_TIMEOUT_SECONDS
 from ..wechat_image_uploader import WeChatImageUploader
 
 
+# ── WeChat 错误码分类 ─────────────────────────────────────
+
+class WeChatError(Exception):
+    """微信 API 错误基类。"""
+
+    # 分类标签
+    CATEGORY = "unknown"
+
+    def __init__(self, errcode: int, errmsg: str) -> None:
+        self.errcode = errcode
+        self.errmsg = errmsg
+        super().__init__(f"[{errcode}] {errmsg}")
+
+
+class WeChatAuthError(WeChatError):
+    """鉴权失败（token 过期/无效/无权限）。"""
+    CATEGORY = "auth"
+
+
+class WeChatParamError(WeChatError):
+    """参数错误（空内容/无效格式/超限）。"""
+    CATEGORY = "param"
+
+
+class WeChatQuotaError(WeChatError):
+    """配额耗尽（API 限流/素材数量超限）。"""
+    CATEGORY = "quota"
+
+
+class WeChatServerError(WeChatError):
+    """微信服务端错误（5xx/系统繁忙）。"""
+    CATEGORY = "server"
+
+
+class WeChatNetworkError(WeChatError):
+    """网络/连接错误（超时/无法访问）。"""
+    CATEGORY = "network"
+
+
+_WX_ERROR_CODE_MAP: dict[int, type[WeChatError]] = {
+    # 40001: access_token 失效或非法
+    40001: WeChatAuthError,
+    # 40014: access_token 不合法
+    40014: WeChatAuthError,
+    # 40016: article 数量超限
+    40016: WeChatQuotaError,
+    # 40029: code 无效（OAuth 相关）
+    40029: WeChatAuthError,
+    # 40125: appsecret 无效
+    40125: WeChatAuthError,
+    # 41001: access_token 缺失
+    41001: WeChatAuthError,
+    # 41002: msgxml 为空
+    41002: WeChatParamError,
+    # 42001: access_token 过期
+    42001: WeChatAuthError,
+    # 43004: 需要 POST 请求
+    43004: WeChatParamError,
+    # 44001: 空白媒体文件
+    44001: WeChatParamError,
+    # 44002: 非空 media_id
+    44002: WeChatParamError,
+    # 44003: 空白图片
+    44003: WeChatParamError,
+    # 45001: 媒体文件大小超限
+    45001: WeChatQuotaError,
+    # 45002: 内容大小超限
+    45002: WeChatQuotaError,
+    # 45003: 标题大小超限
+    45003: WeChatQuotaError,
+    # 45004: 作者大小超限
+    45004: WeChatQuotaError,
+    # 45008: 文章数量超限
+    45008: WeChatQuotaError,
+    # 40013: appid 无效
+    40013: WeChatAuthError,
+    # 40097: 参数不正确
+    40097: WeChatParamError,
+    # 61003: clientversion 已过期
+    61003: WeChatAuthError,
+    # 9999: 系统内部错误
+    9999: WeChatServerError,
+}
+
+
+def _classify_wechat_error(errcode: int, errmsg: str) -> WeChatError:
+    """根据 errcode 分类并构造对应的 WeChatError 子类。"""
+    error_cls = _WX_ERROR_CODE_MAP.get(errcode, WeChatError)
+    return error_cls(errcode, errmsg)
+
+
+def _check_wechat_response(decoded: dict) -> None:
+    """检查微信 API 响应，错误时抛出对应分类的异常。"""
+    if not decoded.get("errcode"):
+        return
+    errcode = int(decoded["errcode"])
+    errmsg = decoded.get("errmsg", "unknown WeChat API error")
+    raise _classify_wechat_error(errcode, errmsg)
+
+
 # ── Markdown → 微信公众号 HTML 渲染 ─────────────────────
 
 _WX_PARAGRAPH_STYLE = 'font-size:16px; line-height:1.8; color:#333; margin:1em 0;'
@@ -169,19 +269,19 @@ class WeChatDraftPublisher:
         try:
             with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
+        except (ConnectionError, TimeoutError) as exc:
+            raise WeChatNetworkError(0, f"草稿发布请求失败: {exc}") from exc
         except Exception as exc:
-            raise RuntimeError(f"WeChat draft add request failed: {exc}") from exc
-        if decoded.get("errcode"):
-            errmsg = decoded.get("errmsg", "unknown WeChat API error")
-            raise RuntimeError(f"WeChat draft add failed: {errmsg}")
+            raise WeChatNetworkError(0, f"草稿发布请求异常: {exc}") from exc
+        _check_wechat_response(decoded)
         media_id = str(decoded.get("media_id", ""))
         if not media_id:
-            raise RuntimeError(f"WeChat draft add failed: {decoded}")
+            raise WeChatParamError(0, f"草稿发布响应缺少 media_id: {decoded}")
         return media_id
 
     def _upload_cover_image(self, image_bytes: bytes) -> str:
         if not image_bytes:
-            raise RuntimeError("Generated empty cover image")
+            raise WeChatParamError(0, "Generated empty cover image")
 
         boundary = f"----OpenClaw{uuid.uuid4().hex}"
         body = (
@@ -200,16 +300,21 @@ class WeChatDraftPublisher:
         try:
             with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
+        except (ConnectionError, TimeoutError) as exc:
+            raise WeChatNetworkError(0, f"封面图上传请求失败: {exc}") from exc
         except Exception as exc:
-            raise RuntimeError(f"WeChat thumb upload request failed: {exc}") from exc
+            raise WeChatNetworkError(0, f"封面图上传请求异常: {exc}") from exc
 
         if decoded.get("errcode"):
+            errcode = int(decoded["errcode"])
             errmsg = decoded.get("errmsg", "unknown WeChat API error")
-            raise RuntimeError(f"WeChat thumb upload failed: {errmsg}")
+            if errcode in (45001, 45002, 45003, 45004, 45008, 40016):
+                raise WeChatQuotaError(errcode, f"封面上传失败: {errmsg}")
+            raise _classify_wechat_error(errcode, f"封面上传失败: {errmsg}")
 
         media_id = str(decoded.get("media_id", ""))
         if not media_id:
-            raise RuntimeError(f"WeChat thumb upload failed: {decoded}")
+            raise WeChatParamError(0, f"封面上传响应缺少 media_id: {decoded}")
         return media_id
 
     def _upload_permanent_image(self, image_path: str) -> str:
@@ -219,14 +324,14 @@ class WeChatDraftPublisher:
         使用 material/add_material 接口，type=image。
         """
         if not image_path:
-            raise RuntimeError("Empty image path")
-        
+            raise WeChatParamError(0, "Empty image path")
+
         # 读取图片文件
         with open(image_path, "rb") as f:
             image_bytes = f.read()
-        
+
         if not image_bytes:
-            raise RuntimeError(f"Empty image file: {image_path}")
+            raise WeChatParamError(0, f"Empty image file: {image_path}")
         
         # 根据文件扩展名确定 MIME 类型
         ext = image_path.lower().rsplit(".", 1)[-1] if "." in image_path else "jpeg"
@@ -248,7 +353,7 @@ class WeChatDraftPublisher:
             f"Content-Type: {content_type}\r\n\r\n"
         ).encode("utf-8") + image_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
         
-        url = f"{self.upload_api_url}?access_token={parse.quote(self.access_token or '')}&type=thumb"
+        url = f"{self.upload_api_url}?access_token={parse.quote(self.access_token or '')}&type=image"
         req = request.Request(
             url,
             data=body,
@@ -258,16 +363,15 @@ class WeChatDraftPublisher:
         try:
             with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
+        except (ConnectionError, TimeoutError) as exc:
+            raise WeChatNetworkError(0, f"永久素材上传请求失败: {exc}") from exc
         except Exception as exc:
-            raise RuntimeError(f"WeChat image upload request failed: {exc}") from exc
-        
-        if decoded.get("errcode"):
-            errmsg = decoded.get("errmsg", "unknown WeChat API error")
-            raise RuntimeError(f"WeChat image upload failed: {errmsg}")
-        
+            raise WeChatNetworkError(0, f"永久素材上传请求异常: {exc}") from exc
+
+        _check_wechat_response(decoded)
         media_id = str(decoded.get("media_id", ""))
         if not media_id:
-            raise RuntimeError(f"WeChat image upload failed: {decoded}")
+            raise WeChatParamError(0, f"永久素材上传响应缺少 media_id: {decoded}")
         return media_id
 
     def _build_newspic_payload(
@@ -358,12 +462,12 @@ class WeChatDraftPublisher:
         try:
             with opener(req, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
                 decoded = json.loads(response.read().decode("utf-8"))
+        except (ConnectionError, TimeoutError) as exc:
+            raise WeChatNetworkError(0, f"草稿发布请求失败: {exc}") from exc
         except Exception as exc:
-            raise RuntimeError(f"WeChat draft add request failed: {exc}") from exc
-        if decoded.get("errcode"):
-            errmsg = decoded.get("errmsg", "unknown WeChat API error")
-            raise RuntimeError(f"WeChat draft add failed: {errmsg}")
+            raise WeChatNetworkError(0, f"草稿发布请求异常: {exc}") from exc
+        _check_wechat_response(decoded)
         media_id = str(decoded.get("media_id", ""))
         if not media_id:
-            raise RuntimeError(f"WeChat draft add failed: {decoded}")
+            raise WeChatParamError(0, f"草稿发布响应缺少 media_id: {decoded}")
         return media_id

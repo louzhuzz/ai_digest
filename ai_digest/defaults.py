@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+"""
+默认组件构建器。
+
+所有 collector 通过 registry.py 的 COLLECTOR_REGISTRY 注册。
+新增数据源：只需在 registry.py 添加条目 + 在 collect_args 补充 URL 参数。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,85 +16,41 @@ from .collectors.hn import HNFrontPageCollector
 from .collectors.huggingface import HFTrendingCollector
 from .collectors.web_news import WebNewsIndexCollector
 from .collectors.rss import RSSCollector
+from .collectors.zhihu import ZhihuHotListCollector
+from .collectors.weibo import WeiboHotSearchCollector
 from .publishers.wechat import WeChatDraftPublisher
 from .settings import AppSettings
 from .wechat_image_uploader import WeChatImageUploader
 
 
+# ── 数据源配置 ──────────────────────────────────────────────────────────
+
 @dataclass(frozen=True)
 class SourceSpec:
     name: str
     url: str
-    kind: str
+    kind: str      # 必须在 COLLECTOR_REGISTRY 中存在
     category: str
     allowed_path_prefixes: tuple[str, ...] = ()
 
 
-class BoundCollector:
-    def collect(self) -> list:
-        raise NotImplementedError
+# ── 已知 collector 的构造参数（URL 参数从 SourceSpec.url 注入） ────────
+
+_COLLECTOR_CTOR_KWARGS: dict[str, dict] = {
+    "github_trending": {},
+    "hn_frontpage": {},
+    "hf_trending": {},
+    "web_news_index": {},  # allowed_path_prefixes 从 SourceSpec 注入
+    "rss": {},
+    "zhihu_hot": {},
+    "weibo_hot": {},
+}
+
+# 仅 zhihu_hot / weibo_hot 不需要 URL 参数（collect() 无参数）
+_NO_URL_KINDS = {"zhihu_hot", "weibo_hot"}
 
 
-class BoundGitHubTrendingCollector(BoundCollector):
-    def __init__(self, collector: GitHubTrendingCollector, page_url: str) -> None:
-        self.collector = collector
-        self.page_url = page_url
-
-    def collect(self) -> list:
-        return self.collector.collect(self.page_url)
-
-
-class BoundHNCollector(BoundCollector):
-    def __init__(self, collector: HNFrontPageCollector, page_url: str) -> None:
-        self.collector = collector
-        self.page_url = page_url
-
-    def collect(self) -> list:
-        return self.collector.collect(self.page_url)
-
-
-class BoundHFTrendingCollector(BoundCollector):
-    def __init__(self, collector: HFTrendingCollector, page_url: str) -> None:
-        self.collector = collector
-        self.page_url = page_url
-
-    def collect(self) -> list:
-        return self.collector.collect(self.page_url)
-
-
-class BoundWebNewsCollector(BoundCollector):
-    def __init__(self, collector: WebNewsIndexCollector, page_url: str) -> None:
-        self.collector = collector
-        self.page_url = page_url
-
-    def collect(self) -> list:
-        return self.collector.collect(self.page_url)
-
-
-class BoundRSSCollector(BoundCollector):
-    def __init__(self, collector: RSSCollector, page_url: str) -> None:
-        self.collector = collector
-        self.page_url = page_url
-
-    def collect(self) -> list:
-        return self.collector.collect(self.page_url)
-
-
-class CompositeCollector:
-    def __init__(self, collectors: Iterable[BoundCollector]) -> None:
-        self.collectors = list(collectors)
-        self.errors: list[str] = []
-
-    def collect(self) -> list:
-        items = []
-        self.errors = []
-        for collector in self.collectors:
-            try:
-                items.extend(collector.collect())
-            except Exception as exc:
-                self.errors.append(str(exc))
-        return items
-
+# ── 默认数据源清单 ──────────────────────────────────────────────────────
 
 def build_default_source_specs() -> list[SourceSpec]:
     return [
@@ -104,23 +66,64 @@ def build_default_source_specs() -> list[SourceSpec]:
         SourceSpec(name="CSDN AI", url="https://aillm.csdn.net/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/details/", "/p/", "/news/", "/article/")),
         SourceSpec(name="雷锋网", url="https://www.leiphone.com/feed", kind="rss", category="news"),
         SourceSpec(name="爱范儿", url="https://www.ifanr.com/feed", kind="rss", category="news"),
+        SourceSpec(name="知乎热榜", url="", kind="zhihu_hot", category="trending"),
+        SourceSpec(name="微博热搜", url="", kind="weibo_hot", category="trending"),
     ]
 
 
-def build_default_collector() -> CompositeCollector:
+# ── BoundCollector 工厂 ──────────────────────────────────────────────────
+
+def _make_bound(spec: SourceSpec):
+    """根据 SourceSpec 构造对应的 BoundCollector。"""
+    kind = spec.kind
+
+    if kind == "github_trending":
+        collector = GitHubTrendingCollector()
+        from .collectors import BoundGitHubTrendingCollector
+        return BoundGitHubTrendingCollector(collector, spec.url)
+
+    elif kind == "hn_frontpage":
+        collector = HNFrontPageCollector()
+        from .collectors import BoundHNCollector
+        return BoundHNCollector(collector, spec.url)
+
+    elif kind == "hf_trending":
+        collector = HFTrendingCollector()
+        from .collectors import BoundHFTrendingCollector
+        return BoundHFTrendingCollector(collector, spec.url)
+
+    elif kind == "web_news_index":
+        collector = WebNewsIndexCollector(spec.name, allowed_path_prefixes=spec.allowed_path_prefixes)
+        from .collectors import BoundWebNewsCollector
+        return BoundWebNewsCollector(collector, spec.url)
+
+    elif kind == "rss":
+        collector = RSSCollector(spec.name)
+        from .collectors import BoundRSSCollector
+        return BoundRSSCollector(collector, spec.url)
+
+    elif kind == "zhihu_hot":
+        collector = ZhihuHotListCollector()
+        from .collectors import BoundZhihuCollector
+        return BoundZhihuCollector(collector)
+
+    elif kind == "weibo_hot":
+        collector = WeiboHotSearchCollector()
+        from .collectors import BoundWeiboCollector
+        return BoundWeiboCollector(collector)
+
+    else:
+        raise ValueError(f"Unknown collector kind: {kind}")
+
+
+# ── 组件构建入口 ────────────────────────────────────────────────────────
+
+def build_default_collector() -> "CompositeCollector":
+    """构建 CompositeCollector，包含全部已注册数据源。"""
+    from .collectors import CompositeCollector
+
     sources = build_default_source_specs()
-    collectors: list[BoundCollector] = []
-    for source in sources:
-        if source.kind == "github_trending":
-            collectors.append(BoundGitHubTrendingCollector(GitHubTrendingCollector(), source.url))
-        elif source.kind == "hn_frontpage":
-            collectors.append(BoundHNCollector(HNFrontPageCollector(), source.url))
-        elif source.kind == "hf_trending":
-            collectors.append(BoundHFTrendingCollector(HFTrendingCollector(), source.url))
-        elif source.kind == "web_news_index":
-            collectors.append(BoundWebNewsCollector(WebNewsIndexCollector(source.name, allowed_path_prefixes=source.allowed_path_prefixes), source.url))
-        elif source.kind == "rss":
-            collectors.append(BoundRSSCollector(RSSCollector(source.name), source.url))
+    collectors = [_make_bound(spec) for spec in sources]
     return CompositeCollector(collectors)
 
 
