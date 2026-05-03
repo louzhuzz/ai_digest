@@ -231,7 +231,15 @@ You write it. Constraints:
 - **Chinese Markdown**. Title must state today's key judgment.
 - Start with a **lede** (overall take), then expand.
 - **Don't cover everything equally**. Pick 2-3 main points, mention others briefly.
-- No code blocks, tables, blockquotes, or HTML tags.
+- **支持以下 Markdown 语法**（`ai_digest.wechat_renderer.render()` 渲染）：
+  - 标题 `#` / `##` / `###` → 带主题样式（h1 下划线、h2/h3 分级）
+  - 代码块 ``` ``` ` `` ` → 语法高亮（关键字蓝/字符串橙/注释灰/数字绿，无外部依赖）
+  - 表格 `| col1 | col2 |` → 横向滚动容器（手机端友好）
+  - 引用块 `>` → 左侧蓝色边线 + 浅灰背景
+  - Callout 提示框 `> [!tip]` / `> [!warning]` / `> [!important]` → 彩色语义框（💡📝⚠️⭐）
+  - 围栏容器 `:::stat` / `:::compare` / `:::quote` / `:::dialogue` → 特殊布局
+  - 外链 `[text](url)` → 自动转脚注（微信不允许外链）
+  - CJK + English 混排 → 自动加空格（排版美观）
 - No labels like "摘要:", "价值:", "为什么值得跟:" — just natural prose.
 - **Only use facts you have verified**. If you're unsure, say so or skip it.
 - **Explicitly mention dates** for any item that is not from today.
@@ -450,7 +458,7 @@ time_filtered = [i for i in filtered if i.published_at.date() >= yesterday]
 # Step 6: 发布
 
 # Step 7: 持久化（发布后必须）
-deduper.persist(time_filtered, now=now)
+deduper.persist(time_filtered, now=now)  # now 必须是 datetime.now(timezone.utc)
 ```
 
 ## Using the Webapp
@@ -470,6 +478,7 @@ The webapp lets you preview the rendered HTML, edit markdown, and publish. But t
 - Items with same `dedupe_key` or URL within 7 days will be filtered out.
 - Same item can appear on different days, but not same day.
 - If something important was already published and you want to re-include, manually delete its row from `data/state.db`.
+- **双轨去重**：`exact` 轨道（URL/dedupe_key 精确匹配）+ `simhash` 轨道（64-bit simhash，指纹 hamming ≤ 3 判定重复）。`DigestItem.content_hash` 字段存储 simhash 指纹，跨会话近似去重。
 
 ## Quality Notes
 
