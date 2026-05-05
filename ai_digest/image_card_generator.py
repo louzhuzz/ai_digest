@@ -100,6 +100,134 @@ html, body {{
     position: relative;
     padding: 34px 42px 30px;
     overflow: hidden;
+    /* Tier-based font sizes — defaults (tier2) */
+    --title-size: 50px;
+    --body-size: 34px;
+    --data-value-size: 156px;
+    --list-keyword-size: 34px;
+    --list-desc-size: 26px;
+    --grid-value-size: 58px;
+    --quote-body-size: 48px;
+    --hero-value-size: 156px;
+    --cover-title-size: 84px;
+    --highlight-size: 28px;
+    --tag-size: 20px;
+}}
+/* tier1: 1-2 cards — largest sizes */
+.card[data-tier="1"] {{
+    --title-size: 56px;
+    --body-size: 36px;
+    --data-value-size: 168px;
+    --list-keyword-size: 36px;
+    --list-desc-size: 28px;
+    --grid-value-size: 64px;
+    --quote-body-size: 52px;
+    --hero-value-size: 168px;
+    --cover-title-size: 88px;
+    --highlight-size: 30px;
+    --tag-size: 22px;
+}}
+/* tier2: 3-4 cards — medium sizes (default) */
+.card[data-tier="2"] {{
+    --title-size: 50px;
+    --body-size: 34px;
+    --data-value-size: 156px;
+    --list-keyword-size: 34px;
+    --list-desc-size: 26px;
+    --grid-value-size: 58px;
+    --quote-body-size: 48px;
+    --hero-value-size: 156px;
+    --cover-title-size: 84px;
+    --highlight-size: 28px;
+}}
+/* tier3: 5-6 cards — smallest sizes */
+.card[data-tier="3"] {{
+    --title-size: 44px;
+    --body-size: 30px;
+    --data-value-size: 140px;
+    --list-keyword-size: 30px;
+    --list-desc-size: 24px;
+    --grid-value-size: 52px;
+    --quote-body-size: 42px;
+    --hero-value-size: 140px;
+    --cover-title-size: 76px;
+    --highlight-size: 26px;
+    --tag-size: 17px;
+}}
+/* Typography classes using CSS variables */
+.card-title {{
+    font-size: var(--title-size);
+    font-weight: 800;
+    line-height: 1.14;
+    color: {_COLOR_TEXT};
+    letter-spacing: -0.5px;
+}}
+.card-body {{
+    font-size: var(--body-size);
+    line-height: 1.56;
+    color: {_COLOR_TEXT};
+}}
+.card-data-value {{
+    font-size: var(--data-value-size);
+    font-weight: 800;
+    color: {_COLOR_ACCENT};
+    line-height: 1;
+    letter-spacing: -3px;
+}}
+.card-list-keyword {{
+    font-size: var(--list-keyword-size);
+    font-weight: 800;
+    color: {_COLOR_TEXT};
+    line-height: 1.18;
+}}
+.card-list-desc {{
+    font-size: var(--list-desc-size);
+    color: {_COLOR_SUB};
+    line-height: 1.46;
+}}
+.card-grid-value {{
+    font-size: var(--grid-value-size);
+    font-weight: 800;
+    color: {_COLOR_ACCENT};
+    line-height: 1.05;
+    letter-spacing: -1px;
+}}
+.card-quote-body {{
+    font-size: var(--quote-body-size);
+    font-weight: 600;
+    line-height: 1.34;
+    color: {_COLOR_TEXT};
+    letter-spacing: 0.5px;
+}}
+.card-hero-value {{
+    font-size: var(--hero-value-size);
+    font-weight: 800;
+    color: {_COLOR_ACCENT};
+    line-height: 1;
+    letter-spacing: -3px;
+}}
+.card-cover-title {{
+    font-size: var(--cover-title-size);
+    font-weight: 800;
+    line-height: 1.08;
+    color: {_COLOR_TEXT};
+    letter-spacing: -1px;
+}}
+.card-highlight-box {{
+    border-left: 4px solid {_COLOR_ACCENT};
+    background: {_COLOR_ACCENT_BG};
+    border-radius: 0 12px 12px 0;
+    padding: 22px 26px;
+    font-size: var(--highlight-size);
+    line-height: 1.48;
+    color: {_COLOR_TEXT};
+    margin-top: 16px;
+}}
+.card-tag {{
+    font-size: var(--tag-size);
+    color: #ffffff;
+    font-weight: 600;
+    letter-spacing: 1px;
 }}
 /* 卡片编号 — 装饰性大号数字，右上角 */
 .card-num {{
@@ -139,17 +267,6 @@ html, body {{
     border-radius: 50%;
     background: {_COLOR_WECHAT_GREEN};
 }}
-/* 高亮框 */
-.highlight-box {{
-    border-left: 4px solid {_COLOR_ACCENT};
-    background: {_COLOR_ACCENT_BG};
-    border-radius: 0 12px 12px 0;
-    padding: 22px 26px;
-    font-size: 28px;
-    line-height: 1.48;
-    color: {_COLOR_TEXT};
-    margin-top: 16px;
-}}
 """
 
 
@@ -161,6 +278,44 @@ def _orange_inline(text: str) -> str:
         rf'<span style="color:{_COLOR_ACCENT}; font-weight:600;">\1</span>',
         text,
     )
+
+
+# ---------------------------------------------------------------------------
+# Font scale computation (continuous, based on total card count)
+# ---------------------------------------------------------------------------
+
+_MAX_CARDS = 10  # design ceiling for font interpolation
+
+
+def compute_font_scales(total_cards: int) -> dict[str, str]:
+    """Compute CSS custom property font sizes based on total card count.
+
+    Linear interpolation between tier1 anchors (1-2 cards, largest)
+    and tier3 anchors (5+ cards, smallest) for total_cards 1..10.
+    Returns dict of "--var-name": "Npx" entries for inline style injection.
+    """
+    t = max(1, min(total_cards, _MAX_CARDS))
+    scale = (t - 1) / (_MAX_CARDS - 1)  # 0.0..1.0 across cards 1..10
+
+    anchors = {
+        "--title-size":        (56, 44),
+        "--body-size":         (36, 30),
+        "--data-value-size":   (168, 140),
+        "--list-keyword-size": (36, 30),
+        "--list-desc-size":    (28, 24),
+        "--grid-value-size":   (64, 52),
+        "--quote-body-size":   (52, 42),
+        "--hero-value-size":   (168, 140),
+        "--cover-title-size":  (88, 76),
+        "--highlight-size":    (30, 26),
+        "--tag-size":          (20, 17),
+    }
+
+    result = {}
+    for var, (v1, v3) in anchors.items():
+        val = round(v1 + (v3 - v1) * scale)
+        result[var] = f"{val}px"
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -176,98 +331,88 @@ def _render_cover(card: CardData) -> str:
     title_html = _orange_inline(card.title.replace("\n", "<br>")) if card.title else ""
     tag_text = card.subtitle or "AI DAILY DIGEST"
     return f"""\
-<div class="card" style="
-    padding: 0;
+<!-- 封面背景层 -->
+<div style="
+    position: absolute; top: 0; right: 0;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle at center, {_COLOR_COVER_PATTERN} 0%, transparent 70%);
+    z-index: 0;
+"></div>
+<div style="
+    position: absolute; top: 60px; right: 80px;
+    width: 200px; height: 200px;
+    border: 3px solid {_COLOR_COVER_PATTERN};
+    border-radius: 50%;
+    z-index: 0;
+"></div>
+<div style="
+    position: absolute; bottom: 180px; right: 40px;
+    width: 120px; height: 120px;
+    border: 2px solid {_COLOR_COVER_PATTERN};
+    border-radius: 50%;
+    z-index: 0;
+"></div>
+<!-- 内容区域 -->
+<div style="
+    position: relative; z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 48px 56px 38px;
     background: linear-gradient(160deg, #ffffff 60%, {_COLOR_ACCENT_BG} 100%);
+    border-radius: 20px;
 ">
-    <!-- 背景几何纹理 -->
+    <!-- 左上角日期胶囊 -->
     <div style="
-        position: absolute; top: 0; right: 0;
-        width: 400px; height: 400px;
-        background: radial-gradient(circle at center, {_COLOR_COVER_PATTERN} 0%, transparent 70%);
-        z-index: 0;
-    "></div>
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        background: {_COLOR_ACCENT};
+        color: #ffffff;
+        border-radius: 24px;
+        font-size: var(--tag-size);
+        font-weight: 600;
+        letter-spacing: 1px;
+        width: fit-content;
+    ">{tag_text}</div>
+    <!-- 弹性空间 -->
+    <div style="flex: 1;"></div>
+    <!-- 超大标题 -->
+    <div class="card-cover-title">{title_html}</div>
+    <!-- 副标题/body -->
+    {f'''<div style="
+        font-size: var(--body-size);
+        color: {_COLOR_SUB};
+        margin-top: 22px;
+        max-width: 680px;
+        line-height: 1.42;
+    ">{card.body}</div>''' if card.body else ''}
+    <!-- 底部品牌签名 -->
     <div style="
-        position: absolute; top: 60px; right: 80px;
-        width: 200px; height: 200px;
-        border: 3px solid {_COLOR_COVER_PATTERN};
-        border-radius: 50%;
-        z-index: 0;
-    "></div>
-    <div style="
-        position: absolute; bottom: 180px; right: 40px;
-        width: 120px; height: 120px;
-        border: 2px solid {_COLOR_COVER_PATTERN};
-        border-radius: 50%;
-        z-index: 0;
-    "></div>
-    <!-- 内容区域 -->
-    <div style="
-        position: relative; z-index: 1;
         display: flex;
-        flex-direction: column;
-        height: 100%;
-        padding: 48px 56px 38px;
+        align-items: center;
+        gap: 10px;
+        margin-top: 34px;
     ">
-        <!-- 左上角日期胶囊 -->
         <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 20px;
+            width: 32px; height: 3px;
             background: {_COLOR_ACCENT};
-            color: #ffffff;
-            border-radius: 24px;
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            width: fit-content;
-        ">{tag_text}</div>
-        <!-- 弹性空间 -->
-        <div style="flex: 1;"></div>
-        <!-- 超大标题 -->
-        <div style="
-            font-size: 84px;
-            font-weight: 800;
-            line-height: 1.08;
-            color: {_COLOR_TEXT};
-            max-width: 680px;
-            letter-spacing: -1px;
-        ">{title_html}</div>
-        <!-- 副标题/body -->
-        {f'''<div style="
-            font-size: 30px;
-            color: {_COLOR_SUB};
-            margin-top: 22px;
-            max-width: 680px;
-            line-height: 1.42;
-        ">{card.body}</div>''' if card.body else ''}
-        <!-- 底部品牌签名 -->
+            border-radius: 2px;
+        "></div>
         <div style="
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-top: 34px;
+            gap: 8px;
+            font-size: 16px;
+            color: {_COLOR_SUB};
         ">
             <div style="
-                width: 32px; height: 3px;
-                background: {_COLOR_ACCENT};
-                border-radius: 2px;
+                width: 8px; height: 8px;
+                border-radius: 50%;
+                background: {_COLOR_WECHAT_GREEN};
             "></div>
-            <div style="
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                font-size: 16px;
-                color: {_COLOR_SUB};
-            ">
-                <div style="
-                    width: 8px; height: 8px;
-                    border-radius: 50%;
-                    background: {_COLOR_WECHAT_GREEN};
-                "></div>
-                <span>{card.footer_note or "AI 开发者日报"}</span>
-            </div>
+            <span>{card.footer_note or "AI 开发者日报"}</span>
         </div>
     </div>
 </div>"""
@@ -283,24 +428,14 @@ def _render_content(card: CardData) -> str:
     body_html = _orange_inline(card.body) if card.body else ""
     highlight = ""
     if card.highlight_text:
-        highlight = f'<div class="highlight-box">{card.highlight_text}</div>'
+        highlight = f'<div class="card-highlight-box">{card.highlight_text}</div>'
     return f"""\
-<div class="card">
     {card_num}
     <!-- 标题区 -->
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <!-- 正文区 -->
-    <div style="
-        font-size: 34px;
-        line-height: 1.56;
-        color: {_COLOR_TEXT};
+    <div class="card-body" style="
         flex: 1;
         position: relative;
         z-index: 1;
@@ -309,8 +444,7 @@ def _render_content(card: CardData) -> str:
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_list(card: CardData) -> str:
@@ -349,29 +483,21 @@ def _render_list(card: CardData) -> str:
     </div>
     <!-- 右侧内容 -->
     <div style="flex: 1; padding-bottom: {28 if not is_last else 0}px;">
-        <div style="font-size: 34px; font-weight: 800; color: {_COLOR_TEXT}; line-height: 1.18;">{keyword}</div>
-        <div style="font-size: 26px; color: {_COLOR_SUB}; line-height: 1.46; margin-top: 8px;">{desc}</div>
+        <div class="card-list-keyword">{keyword}</div>
+        <div class="card-list-desc" style="margin-top: 8px;">{desc}</div>
     </div>
 </div>"""
-    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: var(--body-size); line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
     return f"""\
-<div class="card">
     {card_num}
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1;">{items_html}</div>
     {body_html}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_data(card: CardData) -> str:
@@ -381,7 +507,7 @@ def _render_data(card: CardData) -> str:
     数据值超大号居中，标签置于下方，可选多个数据点（items）。
     """
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
-    
+
     # 主数据块
     data_block = ""
     if card.data_value:
@@ -393,21 +519,15 @@ def _render_data(card: CardData) -> str:
     background: {_COLOR_QUOTE_BG};
     border-radius: 20px;
 ">
+    <div class="card-data-value">{card.data_value}</div>
     <div style="
-        font-size: 156px;
-        font-weight: 800;
-        color: {_COLOR_ACCENT};
-        line-height: 1;
-        letter-spacing: -3px;
-    ">{card.data_value}</div>
-    <div style="
-        font-size: 30px;
+        font-size: var(--body-size);
         color: {_COLOR_SUB};
         margin-top: 12px;
         font-weight: 500;
     ">{card.data_label}</div>
 </div>"""
-    
+
     # 附加数据点（网格）
     extra_data = ""
     if card.items:
@@ -420,8 +540,8 @@ def _render_data(card: CardData) -> str:
     padding: 20px;
     text-align: center;
 ">
-    <div style="font-size: 48px; font-weight: 800; color: {_COLOR_ACCENT};">{item.get('value', '')}</div>
-    <div style="font-size: 23px; color: {_COLOR_SUB}; margin-top: 8px; line-height: 1.35;">{item.get('label', '')}</div>
+    <div style="font-size: var(--grid-value-size); font-weight: 800; color: {_COLOR_ACCENT};">{item.get('value', '')}</div>
+    <div style="font-size: var(--list-desc-size); color: {_COLOR_SUB}; margin-top: 8px; line-height: 1.35;">{item.get('label', '')}</div>
 </div>"""
         extra_data = f"""\
 <div style="
@@ -431,19 +551,12 @@ def _render_data(card: CardData) -> str:
     margin-top: 16px;
     position: relative; z-index: 1;
 ">{cells}</div>"""
-    
-    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
-    
+
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: var(--body-size); line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
+
     return f"""\
-<div class="card">
     {card_num}
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; justify-content: center;">
         {data_block}
@@ -453,8 +566,7 @@ def _render_data(card: CardData) -> str:
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_compare(card: CardData) -> str:
@@ -479,7 +591,7 @@ def _render_compare(card: CardData) -> str:
             f'background:{_COLOR_ACCENT}; color:#fff; font-weight:700; margin-left:12px;">'
             f'{tag}</span>' if tag else ""
         )
-        desc_html = f'<div style="font-size:24px; color:{_COLOR_SUB}; line-height:1.35; margin-top:6px;">{desc}</div>' if desc else ""
+        desc_html = f'<div style="font-size:var(--list-desc-size); color:{_COLOR_SUB}; line-height:1.35; margin-top:6px;">{desc}</div>' if desc else ""
         rows_html += f"""\
 <div style="
     display: flex;
@@ -498,29 +610,21 @@ def _render_compare(card: CardData) -> str:
         </div>
         {desc_html}
     </div>
-    <div style="font-size: 48px; font-weight: 800; color: {_COLOR_ACCENT}; line-height: 1;">{value}</div>
+    <div style="font-size: var(--grid-value-size); font-weight: 800; color: {_COLOR_ACCENT}; line-height: 1;">{value}</div>
 </div>"""
 
-    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: 27px; line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
+    body_html = f'<div style="border-left: 4px solid {_COLOR_ACCENT}; padding-left: 20px; font-size: var(--body-size); line-height: 1.45; color: {_COLOR_TEXT}; margin-top: 14px; position: relative; z-index: 1;">{card.body}</div>' if card.body else ""
 
     return f"""\
-<div class="card">
     {card_num}
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1;">{rows_html}</div>
     {body_html}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_closing(card: CardData) -> str:
@@ -533,10 +637,9 @@ def _render_closing(card: CardData) -> str:
     body_html = _orange_inline(card.body.replace("\n", "<br>")) if card.body else ""
     highlight = ""
     if card.highlight_text:
-        highlight = f'<div class="highlight-box" style="max-width: 680px;">{card.highlight_text}</div>'
+        highlight = f'<div class="card-highlight-box" style="max-width: 680px;">{card.highlight_text}</div>'
 
     return f"""\
-<div class="card" style="align-items: center; text-align: center;">
     {card_num}
     <!-- 装饰：顶部渐变 -->
     <div style="
@@ -555,14 +658,7 @@ def _render_closing(card: CardData) -> str:
         justify-content: center;
         padding: 20px 0;
     ">
-        <h2 style="
-            font-size: 54px;
-            font-weight: 800;
-            line-height: 1.16;
-            color: {_COLOR_TEXT};
-            max-width: 700px;
-            letter-spacing: -0.5px;
-        ">{card.title}</h2>
+        <h2 class="card-title" style="max-width: 700px;">{card.title}</h2>
         <div style="
             width: 48px; height: 4px;
             background: {_COLOR_ACCENT};
@@ -570,7 +666,7 @@ def _render_closing(card: CardData) -> str:
             margin: 24px 0;
         "></div>
         <div style="
-            font-size: 32px;
+            font-size: var(--body-size);
             line-height: 1.48;
             color: {_COLOR_SUB};
             max-width: 720px;
@@ -593,8 +689,7 @@ def _render_closing(card: CardData) -> str:
             background: {_COLOR_WECHAT_GREEN};
         "></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_content_grid(card: CardData) -> str:
@@ -621,24 +716,17 @@ def _render_content_grid(card: CardData) -> str:
     min-height: 260px;
 ">
     <div style="font-size: 23px; color: {_COLOR_LIGHT}; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 12px;">{label}</div>
-    <div style="font-size: 58px; font-weight: 800; color: {_COLOR_ACCENT}; line-height: 1.05; letter-spacing: -1px;">{value}</div>
-    <div style="font-size: 25px; color: {_COLOR_SUB}; line-height: 1.36; margin-top: 12px;">{desc}</div>
+    <div class="card-grid-value">{value}</div>
+    <div style="font-size: var(--list-desc-size); color: {_COLOR_SUB}; line-height: 1.36; margin-top: 12px;">{desc}</div>
 </div>"""
 
     highlight = ""
     if card.highlight_text:
-        highlight = f'<div class="highlight-box">{card.highlight_text}</div>'
+        highlight = f'<div class="card-highlight-box">{card.highlight_text}</div>'
 
     return f"""\
-<div class="card">
     {card_num}
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <div style="
         position: relative; z-index: 1; flex: 1;
@@ -651,8 +739,7 @@ def _render_content_grid(card: CardData) -> str:
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_content_hero(card: CardData) -> str:
@@ -665,37 +752,24 @@ def _render_content_hero(card: CardData) -> str:
     hero_value = ""
     if card.data_value:
         hero_value = f"""\
-<div style="
-    font-size: 156px;
-    font-weight: 800;
-    color: {_COLOR_ACCENT};
-    line-height: 1;
-    letter-spacing: -3px;
-">{card.data_value}</div>"""
+<div class="card-hero-value">{card.data_value}</div>"""
     elif card.body:
         hero_value = f"""\
-<div style="
-    font-size: 66px;
+<div class="card-body" style="
+    font-size: var(--body-size);
     font-weight: 800;
-    color: {_COLOR_TEXT};
     line-height: 1.3;
     max-width: 680px;
     letter-spacing: -1px;
 ">{_orange_inline(card.body.replace(chr(10), '<br>'))}</div>"""
 
-    label_html = f'<div style="font-size: 30px; color: {_COLOR_SUB}; margin-top: 16px; line-height: 1.35;">{card.data_label}</div>' if card.data_label else ""
-    subtitle_html = f'<div style="font-size: 26px; color: {_COLOR_LIGHT}; margin-top: 24px; max-width: 680px; line-height: 1.42;">{card.subtitle}</div>' if card.subtitle else ""
-    highlight = f'<div class="highlight-box" style="max-width: 600px; margin-top: 32px;">{card.highlight_text}</div>' if card.highlight_text else ""
+    label_html = f'<div style="font-size: var(--body-size); color: {_COLOR_SUB}; margin-top: 16px; line-height: 1.35;">{card.data_label}</div>' if card.data_label else ""
+    subtitle_html = f'<div style="font-size: var(--body-size); color: {_COLOR_LIGHT}; margin-top: 24px; max-width: 680px; line-height: 1.42;">{card.subtitle}</div>' if card.subtitle else ""
+    highlight = f'<div class="card-highlight-box" style="max-width: 600px; margin-top: 32px;">{card.highlight_text}</div>' if card.highlight_text else ""
 
     return f"""\
-<div class="card" style="align-items: center; text-align: center;">
     {card_num}
-    <h2 style="
-        font-size: 42px;
-        font-weight: 700;
-        line-height: 1.2;
-        color: {_COLOR_TEXT};
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider" style="margin: 12px auto 24px;"></div>
     <div style="
         position: relative; z-index: 1;
@@ -713,8 +787,7 @@ def _render_content_hero(card: CardData) -> str:
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_content_steps(card: CardData) -> str:
@@ -749,31 +822,23 @@ def _render_content_steps(card: CardData) -> str:
         {connector}
     </div>
     <div style="flex: 1; padding-bottom: {28 if not is_last else 0}px;">
-        <div style="font-size: 34px; font-weight: 800; color: {_COLOR_TEXT}; line-height: 1.18;">{label}</div>
-        <div style="font-size: 26px; color: {_COLOR_SUB}; line-height: 1.46; margin-top: 8px;">{desc}</div>
+        <div class="card-list-keyword">{label}</div>
+        <div class="card-list-desc" style="margin-top: 8px;">{desc}</div>
     </div>
 </div>"""
 
-    highlight = f'<div class="highlight-box">{card.highlight_text}</div>' if card.highlight_text else ""
+    highlight = f'<div class="card-highlight-box">{card.highlight_text}</div>' if card.highlight_text else ""
 
     return f"""\
-<div class="card">
     {card_num}
-    <h2 style="
-        font-size: 50px;
-        font-weight: 800;
-        line-height: 1.14;
-        color: {_COLOR_TEXT};
-        letter-spacing: -0.5px;
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider"></div>
     <div style="position: relative; z-index: 1; flex: 1;">{steps_html}</div>
     {highlight}
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 def _render_content_quote(card: CardData) -> str:
@@ -785,17 +850,11 @@ def _render_content_quote(card: CardData) -> str:
     card_num = f'<div class="card-num">{card.page_num:02d}</div>' if card.page_num else ""
     quote_text = _orange_inline(card.body.replace("\n", "<br>")) if card.body else ""
     source_html = f'<div style="font-size: 25px; color: {_COLOR_LIGHT}; margin-top: 22px; font-style: italic;">— {card.subtitle}</div>' if card.subtitle else ""
-    highlight = f'<div class="highlight-box" style="max-width: 600px;">{card.highlight_text}</div>' if card.highlight_text else ""
+    highlight = f'<div class="card-highlight-box" style="max-width: 600px;">{card.highlight_text}</div>' if card.highlight_text else ""
 
     return f"""\
-<div class="card" style="align-items: center; text-align: center;">
     {card_num}
-    <h2 style="
-        font-size: 42px;
-        font-weight: 700;
-        line-height: 1.2;
-        color: {_COLOR_TEXT};
-    ">{card.title}</h2>
+    <h2 class="card-title">{card.title}</h2>
     <div class="divider" style="margin: 12px auto 24px;"></div>
     <div style="
         position: relative; z-index: 1;
@@ -813,14 +872,7 @@ def _render_content_quote(card: CardData) -> str:
             font-family: Georgia, serif;
             opacity: 0.3;
         ">"</div>
-        <div style="
-            font-size: 48px;
-            font-weight: 600;
-            line-height: 1.34;
-            color: {_COLOR_TEXT};
-            max-width: 720px;
-            letter-spacing: 0.5px;
-        ">{quote_text}</div>
+        <div class="card-quote-body" style="max-width: 720px;">{quote_text}</div>
         {source_html}
         <div style="
             width: 48px; height: 3px;
@@ -833,8 +885,7 @@ def _render_content_quote(card: CardData) -> str:
     <div class="footer">
         <div class="green-dot"></div>
         <span>{card.footer_note or "AI 开发者日报"}</span>
-    </div>
-</div>"""
+    </div>"""
 
 
 _RENDERERS: dict[str, Any] = {
@@ -851,8 +902,25 @@ _RENDERERS: dict[str, Any] = {
 }
 
 
-def render_html(card: CardData, account: str = "AI 开发者日报") -> str:
-    """将单张 CardData 渲染为完整的 HTML 页面字符串。"""
+def render_html(card: CardData, account: str = "AI 开发者日报", total_cards: int = 1) -> str:
+    """将单张 CardData 渲染为完整的 HTML 页面字符串。
+
+    Args:
+        card: CardData 实例
+        account: 底部品牌署名
+        total_cards: 这叠卡片的总数量（用于计算 tier: 1-2=tier1, 3-4=tier2, 5+=tier3）
+    """
+    font_scales = compute_font_scales(total_cards)
+    scale_style = "; ".join(f"{k}: {v}" for k, v in font_scales.items())
+
+    # Compute tier from total card count
+    if total_cards <= 2:
+        tier = "1"
+    elif total_cards <= 4:
+        tier = "2"
+    else:
+        tier = "3"
+
     body_html = _RENDERERS[card.card_type](card)
 
     return f"""\
@@ -866,16 +934,18 @@ def render_html(card: CardData, account: str = "AI 开发者日报") -> str:
 </style>
 </head>
 <body style="margin:0; padding:0; background:{_COLOR_BG};">
+<div class="card" data-tier="{tier}" style="{scale_style}">
 {body_html}
+</div>
 </body>
 </html>"""
 
 
-def render_image(card: CardData, output_path: str | Path) -> Path:
+def render_image(card: CardData, output_path: str | Path, total_cards: int = 1) -> Path:
     """使用 Playwright 将 CardData 渲染为 PNG 截图。"""
     from playwright.sync_api import sync_playwright
 
-    html = render_html(card)
+    html = render_html(card, total_cards=total_cards)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -920,13 +990,14 @@ def generate_cards(json_path: str | Path, output_dir: str | Path) -> list[Path]:
     with open(json_path, "r", encoding="utf-8") as f:
         cards_data = json.load(f)
 
+    total = len(cards_data)
     results: list[Path] = []
     for idx, card_dict in enumerate(cards_data):
         card = _parse_card_data(card_dict)
         suffix = card.card_type
         page = card.page_num if card.page_num else idx
         filename = f"card_{idx:02d}_p{page}_{suffix}.png"
-        out = render_image(card, output_dir / filename)
+        out = render_image(card, output_dir / filename, total_cards=total)
         results.append(out)
 
     return results

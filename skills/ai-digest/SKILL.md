@@ -130,7 +130,7 @@ with open("data/cover.png", "wb") as f:
 
 ## Workflow（完整流程）
 
-> ⚠️ **cmd_collect() 已内置来源分级过滤**，不需要再手动过滤。收集回来的数据已经过 HIGH（全量保留）和 MEDIUM（关键词过滤）处理。
+> ⚠️ **cmd_collect() 已内置来源分级过滤**，不需要再手动过滤。收集回来的数据已经过 HIGH（全量保留）和 MEDIUM（关键词过滤）处理。当前约 17 个来源，详见 `defaults.py` 中的 `COLLECTOR_REGISTRY`。
 
 ### Step 1: Collect
 
@@ -159,7 +159,7 @@ output = json.dumps([serialize(i) for i in items], ensure_ascii=False, default=s
 Path("data/items.json").write_bytes(output.encode("utf-8"))
 ```
 
-**数据已内置来源分级过滤**：HIGH 来源（量子位/机器之心/GitHub/HN 等）全量保留；MEDIUM 来源（知乎/微博）需命中 AI 关键词。无需额外过滤。
+**数据已内置来源分级过滤**：HIGH 来源（GitHub Trending / HuggingFace / Hacker News / OpenAI / Anthropic / Google AI / 机器之心 / 新智元 / 量子位 / CSDN AI / RSSHub 等）全量保留；MEDIUM 来源（知乎热榜 / 微博热搜）需命中 AI 关键词。RSSHub 来源包括 Solidot / InfoQ / DeepMind Blog / iThome 等。
 
 ### Step 2: Dedup
 
@@ -172,7 +172,8 @@ from datetime import datetime
 from pathlib import Path
 
 # ⚠️ 必须用 read_bytes() 而不是 read_text("utf-8")，避免 Windows 文本模式编码问题
-raw = json.loads(Path("data/items.json").read_bytes())
+# cmd_collect() 自动写入 data/items_collected.json
+raw = json.loads(Path("data/items_collected.json").read_bytes())
 items = []
 for d in raw:
     if isinstance(d.get("published_at"), str):
@@ -197,24 +198,17 @@ print(f"Dedup: {len(items)} → {len(filtered)} items")
 - 如果必须引用昨日之前的新闻作为背景，**必须在文章中明确标注日期**。
 - ⚠️ 工具脚本抓取的 `published_at` 可能是采集时间而非原文发布时间，需用 `webfetch` 打开原文核实实际发布日期。
 
-### Step 4: AI Search & Verify (REQUIRED)
+### Step 4: AI Verify (REQUIRED)
 
 **Do not passively accept collector output.** The collector is a starting point. You must:
 
 - **Verify facts** from the original source. Use `webfetch` to open key articles and confirm title/date/quotes.
-- **Search for news the collector missed.** Use `MiniMax_web_search` to find breaking news, trending topics, and Chinese AI news that the collector might have failed to fetch (many sources time out or return 403).
 - **Cross-reference** important claims. If a claim appears only in one source, verify it independently.
-- **Log your search** — note which items you verified and which you added from search.
-
-Search queries to consider:
-- Latest model releases (DeepSeek, Qwen, Kimi, Claude, GPT)
-- Chinese AI industry news from last 24 hours
-- GitHub trending AI projects
-- Open-source releases
+- **Log your verification** — note which items you verified.
 
 ### Step 5: Analyze & Think
 
-Read `data/filtered.json` **plus your own search findings**. You decide:
+Read `data/items_collected.json` **plus your own search findings**. You decide:
 
 - What's the main theme today? Model releases? Open-source projects? Industry moves?
 - Which items are related and should be grouped?
@@ -248,13 +242,66 @@ You write it. Constraints:
 
 **Option B: Create card data（贴图/newspic）**
 
+Create `data/cards.json` — a JSON array of card objects. Output card data using the **Structured LLM Output Format** described below, then format as a JSON array.
+
+---
+
+#### Structured LLM Output Format
+
+For each card, output **four lines** followed by a blank line, then the JSON block:
+
+```markdown
+# [mainTitle — the card's primary visual headline, often the biggest/keymost phrase]
+## [cardTitle — the title field in CardData, max ~12 chars for short titles, can be multi-line for cover]
+desc: [30-50 chars description. Use **bold** for numbers. Use `code` for English technical terms.]
+[material_icon_name — snake_case, from Material Icons list at end]
+```
+
+**Rules:**
+- `desc`: Must be 30-50 Chinese characters. **Bold** numbers (e.g., `**98%**`). `code` for English terms (e.g., `` `GPT-5` ``, `` `LoRA` ``).
+- Icon: Use Material Icons snake_case names. Pick the most semantically matching icon from the list below.
+- After the 4-line header, include the complete JSON block for that card.
+
+**Material Icons palette** (use these exact names, snake_case):
+`stars`, `trending_up`, `whatshot`, `bolt`, `lightbulb`, `build`, `code`, `terminal`,
+`settings`, `storage`, `cloud`, `dns`, `security`, `fingerprint`, `palette`,
+`analytics`, `bar_chart`, `pie_chart`, `show_chart`, `table_chart`, `grid_on`,
+`apps`, `dashboard`, `view_module`, `layers`, `public`, `share`, `link`,
+`format_quote`, `format_list_bulleted`, `check_circle`, `warning`, `info`,
+`help_outline`, `bookmark`, `label`, `local_offer`, `shopping_cart`,
+`extension`, `psychology`, `auto_awesome`, `auto_fix_high`, `model_training`,
+`insights`, `explore`, `search`, `find_in_page`, `science`, `biotech`
+
+---
+
+#### Tier-Based Sizing
+
+The renderer auto-selects font sizes by card count. You do NOT need to pass tier info — it is computed automatically from total card count in the deck:
+
+| Cards in deck | Tier | Title size | Body size | Use case |
+|---|---|---|---|---|
+| 1-2 | tier1 | largest (50-56px) | largest | Single focal card |
+| 3-4 | tier2 | medium (42-48px) | medium | Normal deck |
+| 5-6 | tier3 | smallest (36-44px) | smallest | Dense content |
+
+When writing desc, account for tier3 (more cards = smaller fonts = desc must be very concise to avoid overflow).
+
+---
+
+#### Card Types
+
 Create `data/cards.json` — an array of card objects. Card types: `cover` | `content` | `list` | `data` | `compare` | `closing` | `content-grid` | `content-hero` | `content-steps` | `content-quote`
 
 **封面卡片 (cover)** — 杂志封面风，不对称布局，背景几何纹理
-```json
+```markdown
+# DeepSeek V4 开源
+## DeepSeek V4
+desc: **2026年5月**首个全面对齐人类偏好的开源模型，性能接近闭源巨头
+trending_up
+
 {
   "card_type": "cover",
-  "title": "GPT-5 发布\nDeepSeek 开源\nLlama 4 抢跑",
+  "title": "DeepSeek V4 开源\n GPT-5 发布\n Llama 4 抢跑",
   "subtitle": "AI 速递 · 2026.05.01",
   "body": "",
   "footer_note": "AI 开发者日报"
@@ -262,18 +309,28 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **正文卡片 (content)** — 编辑部风格，标题+分隔条+正文
-```json
+```markdown
+# 重点新闻：GPT-5 发布
+## 重点新闻
+desc: OpenAI 发布GPT-5，推理能力达**98分**，刷新 MMLU 纪录
+info
+
 {
   "card_type": "content",
   "page_num": 1,
   "title": "重点新闻",
-  "body": "正文内容...",
+  "body": "OpenAI 发布 GPT-5，推理能力刷新 MMLU 纪录...",
   "highlight_text": "关键信息"
 }
 ```
 
 **列表卡片 (list)** — 时间轴风，左侧竖线+圆点连接
-```json
+```markdown
+# 今日要点
+## 今日要点
+desc: 3条AI热点：**DeepSeek V4**开源、**GPT-5**发布、**Llama4**发布
+format_list_bulleted
+
 {
   "card_type": "list",
   "page_num": 2,
@@ -287,7 +344,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **数据卡片 (data)** — 仪表盘风，超大数字+网格卡片
-```json
+```markdown
+# 下载量爆发
+## 数据亮点
+desc: `HuggingFace`下载量增长**1200%**，创历史新高
+trending_up
+
 {
   "card_type": "data",
   "page_num": 3,
@@ -299,7 +361,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **对比卡片 (compare)** — 对决风，双栏对比+高亮
-```json
+```markdown
+# 模型横评
+## 模型对比
+desc: 四大模型对决：`GPT-5` **98分** vs `DeepSeek` **95分**
+analytics
+
 {
   "card_type": "compare",
   "page_num": 4,
@@ -312,7 +379,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **结尾卡片 (closing)** — 品牌收尾风，大引言+行动号召
-```json
+```markdown
+# 明日再见
+## 今日总结
+desc: 关注公众号获取**每日更新**，AI 速递陪你洞见未来
+bookmark
+
 {
   "card_type": "closing",
   "title": "今日总结",
@@ -322,7 +394,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **四宫格卡片 (content-grid)** — 网格仪表盘风，2×2 并列要点
-```json
+```markdown
+# 四大模型横评
+## 四大模型对比
+desc: 2×2网格：`GPT-5`最强、`DeepSeek`开源、`Qwen3`中文最优、`Llama4`最轻量
+grid_on
+
 {
   "card_type": "content-grid",
   "page_num": 5,
@@ -337,7 +414,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **大字报卡片 (content-hero)** — 冲击力表达，超大数字/关键词居中
-```json
+```markdown
+# 准确率突破
+## 关键数据
+desc: `GPT-5` 基准测试准确率提升至 **98%**，超越人类专家水平
+whatshot
+
 {
   "card_type": "content-hero",
   "page_num": 6,
@@ -349,7 +431,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **步骤流卡片 (content-steps)** — 竖向时间轴/流程
-```json
+```markdown
+# 技术演进路线
+## 技术演进
+desc: 三阶段路径：基础模型 → 能力提升 → 应用落地
+timeline
+
 {
   "card_type": "content-steps",
   "page_num": 7,
@@ -363,7 +450,12 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
 ```
 
 **引言卡片 (content-quote)** — 名言/观点聚焦
-```json
+```markdown
+# 行业领袖观点
+## 行业观点
+desc: `Sam Altman`：**AI**将在**2026年**改变一切行业
+format_quote
+
 {
   "card_type": "content-quote",
   "page_num": 8,
@@ -373,6 +465,16 @@ Create `data/cards.json` — an array of card objects. Card types: `cover` | `co
   "highlight_text": "补充说明（可选）"
 }
 ```
+
+---
+
+#### Output Requirement
+
+After generating all cards with the 4-line header + JSON block format, compile them into a single JSON array in `data/cards.json`. The JSON must:
+- Be a valid JSON array
+- Each object match the `CardData` schema fields exactly
+- Include `card_type` for all cards
+- Include `page_num` (1-indexed, sequential within deck) for all non-cover cards
 
 ### Step 7: Generate Cards (贴图 Only)
 
@@ -405,9 +507,9 @@ python -m ai_digest.tool_run publish --title "Your Title" --file data/article.md
 # 写正文到文件（纯文本，不支持 HTML）
 python -c "open('data/content.txt','w',encoding='utf-8').write('今日要点...')"
 
-# 发布
-python -m ai_digest.tool_run publish-newspic --title "AI 速递" --image-dir data/cards \
-  --content-file data/content.txt
+# 发布（标题须反映当日核心事件，不是泛化描述）
+python -m ai_digest.tool_run publish-newspic --title "今日要点：DeepSeek 开源 V4" --image-dir data/cards \
+  --content-file data/content.txt --dry-run  # 先 dry-run 验证
 ```
 
 Output: `{"draft_id": "xxx"}` on success, `{"error": "..."}` on failure.
@@ -419,7 +521,8 @@ Output: `{"draft_id": "xxx"}` on success, `{"error": "..."}` on failure.
 **必须在发布后执行**，否则相同新闻明天会被重复抓取。
 
 ```python
-deduper.persist(filtered)  # filtered 是 Step 2 的去重结果
+# ⚠️ persist 去重后的全部数据，不是时间过滤后的数据
+deduper.persist(deduped, now=now)  # deduped 是 Step 2 的去重结果，now = datetime.now(timezone.utc)
 ```
 
 ## Quick One-Shot（完整 Python 流程）
@@ -438,27 +541,30 @@ import json
 # Step 1: Collect（内置来源分级过滤）
 collector = build_default_collector()
 items = collector.collect()
+# 输出：data/items_collected.json（由 cmd_collect 自动写入）
 
 # Step 2: Dedup
 settings = load_settings()
 store = SqliteStateStore(settings.state_db_path)
 store.initialize()
 deduper = RecentDedupeFilter(state_store=store)
-filtered = deduper.filter(items)
+deduped = deduper.filter(items)
+# 去重后数据：用于后续 AI 分析
 
-# Step 3: 时间过滤（今日 + 昨日）
-now = datetime.now(timezone.utc)
-yesterday = now.date() - timedelta(days=1)
-time_filtered = [i for i in filtered if i.published_at.date() >= yesterday]
+# Step 3: 时间过滤（今日 + 昨日，AI 自行执行）
+# 来自 Step 2 的 deduped，丢弃 published_at > 48h 的条目
 
 # Step 4: 搜索验证（agent 自行执行）
 
-# Step 5: 撰写文章
+# Step 5: 撰写文章或生成卡片
 
 # Step 6: 发布
 
 # Step 7: 持久化（发布后必须）
-deduper.persist(time_filtered, now=now)  # now 必须是 datetime.now(timezone.utc)
+# ⚠️ 必须 persist 去重后的全部数据，不是时间过滤后的数据
+# 否则今天被过滤的旧闻明天会重新出现
+now = datetime.now(timezone.utc)
+deduper.persist(deduped, now=now)
 ```
 
 ## Using the Webapp
@@ -479,6 +585,14 @@ The webapp lets you preview the rendered HTML, edit markdown, and publish. But t
 - Same item can appear on different days, but not same day.
 - If something important was already published and you want to re-include, manually delete its row from `data/state.db`.
 - **双轨去重**：`exact` 轨道（URL/dedupe_key 精确匹配）+ `simhash` 轨道（64-bit simhash，指纹 hamming ≤ 3 判定重复）。`DigestItem.content_hash` 字段存储 simhash 指纹，跨会话近似去重。
+
+## 标题命名规范
+
+**标题不是"每日新闻速递"，而是"今日热点总结"。**
+
+- ❌ 避免：`每日新闻速递`、`AI 日报`、`今日资讯`
+- ✅ 推荐：`今日要点：DeepSeek 开源 V4 / 谷歌发布 Gemini 2.5` 等具体标题
+- 标题应反映当日核心事件，而非泛化描述
 
 ## Quality Notes
 

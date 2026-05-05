@@ -291,7 +291,7 @@ _COMMANDS = {
 
 def _publish_wrapper() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--title", default="AI 每日新闻速递")
+    parser.add_argument("--title", default="")
     parser.add_argument("--file", default=None, help="Markdown 文件路径（推荐，避免 PowerShell 编码问题）")
     args, _ = parser.parse_known_args()
     cmd_publish(args.title, file_path=args.file)
@@ -327,7 +327,7 @@ def cmd_publish_newspic(title: str, images: list[str], content: str = "", dry_ru
 
 def _publish_newspic_wrapper() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--title", default="AI 每日新闻速递")
+    parser.add_argument("--title", default="")
     parser.add_argument("--images", nargs="+", help="图片文件路径列表")
     parser.add_argument("--image-dir", help="图片目录（自动选取所有 .png/.jpg 文件）")
     parser.add_argument("--content", default="", help="正文内容（纯文本）")

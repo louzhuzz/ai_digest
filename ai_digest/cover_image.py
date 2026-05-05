@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""公众号封面图生成器 — Swiss Editorial 版
+
+设计语言：极简编辑风，深色背景 + 大胆几何色块 + 干净大标题。
+致敬 Swiss Design / 杂志封面：大面积色块对冲，克制留白，信息层级分明。
+"""
 from __future__ import annotations
 
 import io
@@ -8,8 +14,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 
+# ── 画布尺寸 ────────────────────────────────────────────────
 COVER_SIZE = (640, 360)
-MAX_TITLE_LINES = 2
+
+# ── 字体候选 ────────────────────────────────────────────────
 WINDOWS_FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\msyhbd.ttc",
@@ -49,54 +57,99 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _wrap_title(title: str, max_chars: int = 12) -> list[str]:
+def _wrap_title(title: str, max_chars: int = 13) -> list[str]:
+    """按 max_chars 折行，保留语义尽量完整。"""
     compact = " ".join(title.split())
     if len(compact) <= max_chars:
         return [compact]
 
     lines: list[str] = []
     remaining = compact
-    while remaining and len(lines) < MAX_TITLE_LINES:
-        lines.append(remaining[:max_chars])
-        remaining = remaining[max_chars:]
+    while remaining and len(lines) < 2:
+        cut = remaining[:max_chars]
+        # 避免在长词中间切断
+        if len(remaining) > max_chars and "/" not in cut and "-" not in cut[-3:]:
+            # 找最后一个空格
+            last_space = cut.rfind(" ")
+            if last_space > max_chars // 2:
+                cut = cut[:last_space]
+        lines.append(cut)
+        remaining = remaining[len(cut):].lstrip()
     if remaining:
         lines[-1] = lines[-1][:-1] + "…"
     return lines
 
 
+
+
+
 def generate_cover_image(title: str) -> bytes:
-    image = Image.new("RGB", COVER_SIZE, "#0f172a")
+    """
+    生成封面图 — 极简编辑杂志风 (Swiss Design)
+
+    布局:
+      ┌──────────────────────────────────────┐
+      │  标签  ░░░░░░░░░░░░░░░░░░░░░░ (圆)   │  0
+      │  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
+      │                                       │
+      │  ──分隔线──                            │  ~140
+      │  大标题（加粗，左对齐）                  │
+      │  第二行标题                             │  ~250
+      │                                       │
+      │  ────────────────────────────── 细线  │  ~300
+      │  日期 · 来源                           │
+      └──────────────────────────────────────┘  360
+    """
+    W, H = COVER_SIZE
+    char = (20, 20, 22)       # #141416 深炭
+    cream = (30, 30, 35)      # #1e1e23（比全黑柔和的暗灰）
+    accent = (180, 67, 47)    # #b4432f 赤陶色
+    white = (240, 240, 242)   # #f0f0f2 暖白
+    muted = (140, 140, 145)   # #8c8c91
+
+    image = Image.new("RGB", COVER_SIZE, char)
     draw = ImageDraw.Draw(image)
 
-    # Build a simple layered background so the generated cover does not look flat.
-    for idx, color in enumerate(["#0f172a", "#172554", "#1d4ed8"]):
-        inset = idx * 28
-        draw.rounded_rectangle(
-            (inset, inset, COVER_SIZE[0] - inset, COVER_SIZE[1] - inset),
-            radius=32,
-            fill=color,
-        )
+    # ── 唯一装饰：右上赤陶大圆 ──────────────────────────
+    # 只用一个几何元素，克制感
+    draw.ellipse((460, -80, 720, 190), fill=accent)
 
-    draw.ellipse((440, -30, 700, 220), fill="#22c55e")
-    draw.ellipse((360, 150, 620, 420), fill="#38bdf8")
+    # ── 顶部标签 ──────────────────────────────────────
+    tag_x0, tag_y0 = 34, 28
+    tag_font = _load_font(15)
+    draw.text((tag_x0, tag_y0), "AI DAILY DIGEST", font=tag_font, fill=muted)
 
-    tag_font = _load_font(24)
-    title_font = _load_font(46)
-    subtitle_font = _load_font(20)
+    # ── 分隔线 ────────────────────────────────────────
+    line_y = 52
+    line_x1 = 200
+    draw.rectangle((tag_x0, line_y, tag_x0 + line_x1, line_y + 1), fill=muted)
 
-    draw.rounded_rectangle((36, 34, 210, 76), radius=18, fill="#111827")
-    draw.text((54, 44), "AI DAILY DIGEST", font=tag_font, fill="#f8fafc")
-
+    # ── 大标题 ────────────────────────────────────────
+    title_font = _load_font(48)
     lines = _wrap_title(title)
-    y = 110
+    x = 34
+    y = 90
     for line in lines:
-        draw.text((40, y), line, font=title_font, fill="#ffffff")
-        y += 58
+        # 文字阴影（微立体感）
+        shadow_offset = 2
+        draw.text((x + shadow_offset, y + shadow_offset), line,
+                  font=title_font, fill=(10, 10, 12, 255))
+        draw.text((x, y), line, font=title_font, fill=white)
+        y += 60
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    subtitle = f"码途日志 · {today}"
-    draw.text((42, 290), subtitle, font=subtitle_font, fill="#e2e8f0")
+    # ── 标题下方装饰细线 ─────────────────────────────
+    deco_y = y + 16
+    draw.rectangle((x, deco_y, x + 80, deco_y + 2), fill=accent)
+
+    # ── 底部信息 ──────────────────────────────────────
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    sub_font = _load_font(15)
+    source_text = f"码途日志  ·  {date_str}"
+    # 底部分隔线
+    foot_y = H - 52
+    draw.rectangle((x, foot_y, x + 420, foot_y + 1), fill=(50, 50, 55))
+    draw.text((x, foot_y + 10), source_text, font=sub_font, fill=muted)
 
     output = io.BytesIO()
-    image.save(output, format="JPEG", quality=72, optimize=True, progressive=True)
+    image.save(output, format="JPEG", quality=92, optimize=True, progressive=True)
     return output.getvalue()

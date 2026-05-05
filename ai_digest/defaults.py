@@ -64,10 +64,15 @@ def build_default_source_specs() -> list[SourceSpec]:
         SourceSpec(name="新智元", url="https://www.aiera.com.cn/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/", "/news/", "/post/")),
         SourceSpec(name="量子位", url="https://www.qbitai.com/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/", "/post/", "/news/", "/202")),
         SourceSpec(name="CSDN AI", url="https://aillm.csdn.net/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/details/", "/p/", "/news/", "/article/")),
+        SourceSpec(name="CSDN 博客订阅", url="https://rsshub.rssforever.com/csdn/blog/csdngeeknews", kind="rss", category="news"),
         SourceSpec(name="雷锋网", url="https://www.leiphone.com/feed", kind="rss", category="news"),
         SourceSpec(name="爱范儿", url="https://www.ifanr.com/feed", kind="rss", category="news"),
-        SourceSpec(name="知乎热榜", url="", kind="zhihu_hot", category="trending"),
-        SourceSpec(name="微博热搜", url="", kind="weibo_hot", category="trending"),
+        SourceSpec(name="DeepMind Blog", url="https://rsshub.rssforever.com/deepmind/blog", kind="rss", category="news"),
+        SourceSpec(name="DeepLearning AI 周报", url="https://rsshub.rssforever.com/deeplearning/thebatch", kind="rss", category="news"),
+        SourceSpec(name="Solidot 科技", url="https://rsshub.rssforever.com/solidot/www", kind="rss", category="news"),
+        SourceSpec(name="InfoQ 中文", url="https://rsshub.rssforever.com/infoq/recommend", kind="rss", category="news"),
+        SourceSpec(name="iThome 台灣 AI", url="https://rsshub.rssforever.com/ithome/tw/feeds/ai", kind="rss", category="news"),
+        SourceSpec(name="橘鸦 Juya RSS", url="https://imjuya.github.io/juya-ai-daily/rss.xml", kind="rss", category="news"),
     ]
 
 

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import html
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from ..http_client import decode_response, open_url
 from ..models import DigestItem
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and decode HTML entities."""
+    text = re.sub(r'<[^>]+>', '', text)
+    return html.unescape(text).strip()
 
 
 class RSSCollector:
@@ -19,13 +27,43 @@ class RSSCollector:
             xml = decode_response(response)
         return self.parse_feed(xml, feed_url=feed_url)
 
+    def _find_link(self, node: ET.Element, feed_url: str) -> str:
+        """Extract the article link, handling Atom and RSS 2.0 formats."""
+        # RSS 2.0: <link> directly under item
+        link = (node.findtext("link") or "").strip()
+        if link and not link.startswith("http"):
+            link = ""
+        if link:
+            return link
+        # Atom: <link href="..." rel="alternate"/> under item
+        for atom_link in node.findall("link"):
+            rel = atom_link.get("rel", "alternate")
+            href = atom_link.get("href", "")
+            if rel == "alternate" and href.startswith("http"):
+                return href
+        return feed_url
+
+    def _find_summary(self, node: ET.Element) -> str:
+        """Extract best-effort summary: content:encoded > description > empty."""
+        # Try content:encoded first (may contain full HTML, strip it)
+        for child in node:
+            tag = child.tag
+            if tag.endswith("}content") or tag == "content:encoded" or tag == "encoded":
+                raw = child.text or ""
+                return _strip_html(raw)[:2000]
+        # Fallback to description
+        desc = (node.findtext("description") or "").strip()
+        if desc:
+            return _strip_html(desc)[:2000]
+        return ""
+
     def parse_feed(self, xml: str, feed_url: str) -> list[DigestItem]:
         root = ET.fromstring(xml)
         items: list[DigestItem] = []
         for node in root.findall(".//item"):
-            title = (node.findtext("title") or "").strip()
-            link = (node.findtext("link") or "").strip()
-            description = (node.findtext("description") or "").strip()
+            title = _strip_html(node.findtext("title") or "").strip()
+            link = self._find_link(node, feed_url)
+            summary = self._find_summary(node)
             pub_date = self._parse_pub_date(node.findtext("pubDate"))
             items.append(
                 DigestItem(
@@ -34,7 +72,7 @@ class RSSCollector:
                     source=self.source_name,
                     published_at=pub_date,
                     category=self.category,
-                    summary=description,
+                    summary=summary,
                     dedupe_key=link or feed_url,
                 )
             )
