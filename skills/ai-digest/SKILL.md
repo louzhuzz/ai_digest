@@ -231,28 +231,50 @@ This is **your judgment call** — no more ranking formulas or section quotas.
 
 **图片来源优先级**（从高到低）：
 
+0. **⚠️ 图片必须可下载/可显示**：所有图片来源都必须验证可用。若不可访问，按以下顺序切换。
+
 1. **生成 PPT/前端页面 → 截图**（最推荐）：
-   - 用 `pptx` skill 生成一页 PPT（数据对比 / 模型架构 / 流程图等），用 LibreOffice 或 Playwright 转 PDF → `pdftoppm` 截图
+   - 用 `pptx` skill 生成一页 PPT（数据对比 / 模型架构 / 流程图等），用 LibreOffice + PyMuPDF 转 PNG
    - 或用 `frontend-design` skill 生成 HTML 页面，Playwright 截图
-   - 优点：**质量可控、风格统一**，完美适配当日内容，无需搜索
+   - 优点：**质量可控、风格统一、100% 可显示**，无需担心 URL 失效
    - 适合：数据对比图、模型横评、架构图、流程图、关键数字展示
 
-2. **搜索真实图片**：
-   - 用 `MiniMax_web_search` / `webfetch` 搜索并验证图片
+2. **浏览器打开网页 → 直接截图**：
+   - **GitHub 项目优先使用此方案**：`github.com/user/repo` 页面截图，展示项目名+描述+星标数+最新 Release
+   - 适合：Twitter/X 推文、GitHub Release 公告、产品发布会页面、新闻报道页
+   - 优点：**所见即所得**，不受图片 URL 失效/反爬影响
+   - 示例场景：
+     - GitHub 项目主页截图（显示 star 数、description、topics）
+     - GitHub Release 页面截图（显示版本号+更新内容）
+     - OpenAI 官网博客文章页面（保留完整标题+作者+日期）
+   - Playwright 截图代码：
+     ```python
+     from playwright.sync_api import sync_playwright
+
+     with sync_playwright() as p:
+         browser = p.chromium.launch()
+         page = browser.new_page(viewport={"width": 1280, "height": 720})
+         page.goto("https://github.com/user/repo")
+         page.screenshot(path="data/github_screenshot.png", full_page=False)
+         browser.close()
+     ```
+   - ⚠️ 截图后用 `look_at` 工具验证内容正确
+
+3. **搜索真实图片**（验证后可下载）：
+   - 用 `MiniMax_web_search` / `webfetch` 搜索并验证图片 URL
    - 来源：GitHub og:image、新闻 og:image、科技媒体头图
    - **必须是真实存在的产品图/新闻图**，不能是 AI 生成的想象图
-   - 优先选择**媒体官方**发布的图片（有出处可溯）
+   - ⚠️ **使用前必须 `webfetch` 验证图片 URL 返回 HTTP 200**，失效则退回方案 1
 
-3. **官网/新闻 og:image**：`webfetch` 获取真实图片 URL
-   - GitHub 项目：`github.com/user/repo` → 找 `<meta property="og:image">`
-   - 新闻文章：打开原文 → 找 `<meta property="og:image">`
+4. **官网/新闻 og:image**（验证后可下载）：
+   - `webfetch` 获取真实图片 URL，验证 HTTP 200 后使用
+   - ⚠️ 腾讯新闻、知乎等平台 og:image 有反爬限制，验证失败则退回方案 1
 
-4. **封面图**：`ai_digest.cover_image.generate_cover_image()` 生成（PIL 模板，非 AI）
+5. **封面图**：`ai_digest.cover_image.generate_cover_image()` 生成（PIL 模板，非 AI）
 
-5. **AI 生图**（保底）：
+6. **AI 生图**（保底）：
    - 用 `ai_digest.dashscope_image`（`qwen-image-2.0-pro` 或 `z-image-turbo`）
    - 适合：封面、概念图、无合适真实图片时
-   - 风格推荐：`<flat illustration>`（扁平插画）
 
 **PPT 截图完整流程**：
 
@@ -288,6 +310,7 @@ pip install python-pptx PyMuPDF
 - 每篇**头条/第一个主题**配一张图（真实产品图或信息图）
 - 每个**子章节**最多一张
 - 不要在所有段落之间插图——留白比堆图更专业
+- ⚠️ 配图前必须验证 URL 可访问，失效则改用 PPT/HTML 截图
 
 **技术实现（图文消息）**：
 
@@ -305,10 +328,13 @@ pip install python-pptx PyMuPDF
 
 | 类型 | 推荐来源 | 示例 |
 |------|---------|------|
-| 数据图表 | **PPT / 前端页面生成** | 模型横评、数据对比（`pptx` skill） |
-| 流程架构 | **PPT / 前端页面生成** | Agent 工作流（`pptx` skill 或 Playwright） |
-| 模型/产品 logo | GitHub/官网 og:image | `openai.com` → og:image |
-| 新闻事件图 | 新闻媒体 og:image | `aibase.com/news/xxx` → og:image |
+| 数据图表 | **PPT / 前端页面生成** | 模型横评、数据对比（方案 1） |
+| 流程架构 | **PPT / 前端页面生成** | Agent 工作流（方案 1） |
+| 推文/动态 | **浏览器截图** | Twitter/X 帖子（方案 2） |
+| 产品发布 | **浏览器截图** | OpenAI 官网博客（方案 2） |
+| GitHub Release | **浏览器截图** | Release 页面（方案 2） |
+| 模型/产品 logo | GitHub/官网 og:image（验证后） | `openai.com` → og:image |
+| 新闻事件图 | 新闻媒体 og:image（验证后） | `aibase.com/news/xxx` → og:image |
 | 封面图 | `cover_image.py` | 公众号封面（模板生成） |
 
 ### Step 6: Write Article or Card Content
@@ -333,6 +359,17 @@ You write it. Constraints:
 - **Only use facts you have verified**. If you're unsure, say so or skip it.
 - **Explicitly mention dates** for any item that is not from today.
 - Title should be 12-24 characters, specific to today, not generic.
+- **每日推荐至少一个 GitHub 项目**：
+  - 从收集的数据中选**当天最值得关注**的 GitHub 项目（或新发布的开源项目）
+  - 格式：`## 🛠️ 项目名` → 3-5 句话介绍：项目做什么、为什么值得关注、用在什么场景
+  - 不要只给项目名——要写清楚「它解决了什么问题」和「我为什么推荐它」
+  - 示例：
+    ```markdown
+    ## 🛠️ Ollama-WebUI：把 Ollama 变成网页聊天界面
+    
+    一个功能完整的网页 UI，让你可以直接在浏览器里调用本地大模型。支持多模型切换、对话历史导出、API 密钥管理。如果你在本地跑 Ollama 但不喜欢命令行，这个界面值得一试。
+    ```
+  - GitHub 项目介绍可直接从 `github.com/user/repo` 页面抓取 README 前 3 段精炼
 - Professional tone, not marketing or colloquial.
 
 **Option B: Create card data（贴图/newspic）**
@@ -688,6 +725,65 @@ The webapp lets you preview the rendered HTML, edit markdown, and publish. But t
 - ❌ 避免：`每日新闻速递`、`AI 日报`、`今日资讯`
 - ✅ 推荐：`今日要点：DeepSeek 开源 V4 / 谷歌发布 Gemini 2.5` 等具体标题
 - 标题应反映当日核心事件，而非泛化描述
+
+## 标题与行文风格
+
+**核心原则：像一个人写的，不是像一台机器写的。**
+
+### 标题风格
+
+| 类型 | 示例 | 特点 |
+|------|------|------|
+| 日期型 | `AI日报 3/22` | 简洁，适合固定栏目 |
+| 摘要型 | `AI日报 3/22\|OpenAI收购...,英伟达发布新架构...` | 标题即目录，读者一眼扫描全文 |
+| 主题标签型 | `【AI日报】2026年3月6日:两会热议AI下半场...` | 信息密度最高，适合突发热点 |
+| 双语型 | `AI Daily Digest - 2026-03-22【...】` | 国际化定位 |
+
+**规则**：
+- 标题 12-24 字符，**具体到当日事件**，不泛化
+- ❌ 不用：`每日新闻速递`、`AI 日报`、`今日资讯`
+- ✅ 用：`今日要点：DeepSeek 开源 V4`（具体、即时）
+
+### 行文风格
+
+**删除 AI 味词汇**：
+- ❌ 禁用：`让我们`、`在这个时代`、`值得注意的是`、`毋庸置疑`
+- 这些词是 AI 写作的指纹，要全部清除
+
+**段落原则**：
+- 每段**不超过 3 句话**（手机端阅读友好）
+- 短句比长句好——留白比堆砌更专业
+- 每段回答：**"开发者为什么要关心？"**
+
+**节奏控制**：
+- 开头：直接给结论，不要铺垫
+- 主体：2-3 个重点展开，其他一笔带过
+- 结尾：一句总结 + 独立判断（不说"以上就是今日内容"）
+
+**数据支撑**：
+- 有数字比没数字有说服力：`GPT-5 在 MMLU 达 **98%**` 而非 `GPT-5 表现优异`
+- 数字要加粗 `` `GPT-5` ``
+
+**专业克制**：
+- 不自嗨、不营销、不感叹号
+- 有观点、有判断、不只做摘要
+- 风格克制、统一，不能今天活泼明天严肃
+
+### 配图风格
+
+**来源优先级**：
+1. 真实产品/新闻截图（首选）
+2. PPT / 前端页面信息图（数据对比、架构图）
+3. 模型 Logo / 官网 og:image
+4. 封面图模板
+5. AI 生图（保底）
+
+**插入原则**：
+- 头条配一张图（真实产品图或信息图）
+- 每个子章节最多一张
+- 不要在所有段落之间插图——留白比堆图更专业
+
+> **风格来源**：参考「金鹰AI日报」「AI Daily Digest」「量子位」等公众号，核心是"内容温度和特色要人把关，AI 负责提效"。
 
 ## Quality Notes
 
