@@ -216,6 +216,101 @@ Read `data/items_collected.json` **plus your own search findings**. You decide:
 
 This is **your judgment call** — no more ranking formulas or section quotas.
 
+### Step 5.5: Plan Illustrations (图文配图)
+
+**Before writing, decide where images go and how to get them.**
+
+**配图密度决策**：
+
+| 密度 | 图片数 | 适用场景 |
+|------|--------|---------|
+| `minimal` | 1-2 张 | 快讯/短文 |
+| `balanced` | 3-5 张 | 标准日报（推荐） |
+| `per-section` | 每节 1 张 | 深度分析 |
+| `rich` | 6+ 张 | 系列专题 |
+
+**图片来源优先级**（从高到低）：
+
+1. **生成 PPT/前端页面 → 截图**（最推荐）：
+   - 用 `pptx` skill 生成一页 PPT（数据对比 / 模型架构 / 流程图等），用 LibreOffice 或 Playwright 转 PDF → `pdftoppm` 截图
+   - 或用 `frontend-design` skill 生成 HTML 页面，Playwright 截图
+   - 优点：**质量可控、风格统一**，完美适配当日内容，无需搜索
+   - 适合：数据对比图、模型横评、架构图、流程图、关键数字展示
+
+2. **搜索真实图片**：
+   - 用 `MiniMax_web_search` / `webfetch` 搜索并验证图片
+   - 来源：GitHub og:image、新闻 og:image、科技媒体头图
+   - **必须是真实存在的产品图/新闻图**，不能是 AI 生成的想象图
+   - 优先选择**媒体官方**发布的图片（有出处可溯）
+
+3. **官网/新闻 og:image**：`webfetch` 获取真实图片 URL
+   - GitHub 项目：`github.com/user/repo` → 找 `<meta property="og:image">`
+   - 新闻文章：打开原文 → 找 `<meta property="og:image">`
+
+4. **封面图**：`ai_digest.cover_image.generate_cover_image()` 生成（PIL 模板，非 AI）
+
+5. **AI 生图**（保底）：
+   - 用 `ai_digest.dashscope_image`（`qwen-image-2.0-pro` 或 `z-image-turbo`）
+   - 适合：封面、概念图、无合适真实图片时
+   - 风格推荐：`<flat illustration>`（扁平插画）
+
+**PPT 截图完整流程**：
+
+```python
+import subprocess
+import fitz
+
+# 1. PPTX → PDF（LibreOffice headless）
+# soffice.exe 位于 C:\Program Files\LibreOffice\program\soffice.exe
+subprocess.run([
+    r'C:\Program Files\LibreOffice\program\soffice.exe',
+    '--headless', '--convert-to', 'pdf',
+    '--outdir', 'data', 'data/my_slides.pptx'
+])
+
+# 2. PDF → PNG（PyMuPDF，144 DPI = 2x 缩放）
+doc = fitz.open('data/my_slides.pdf')
+for i, page in enumerate(doc):
+    mat = fitz.Matrix(2, 2)
+    pix = page.get_pixmap(matrix=mat)
+    pix.save(f'data/slide_{i+1}.png')
+
+# 3. 将截图插入文章 Markdown
+# ![PPT截图](data/slide_1.png)
+```
+
+**依赖安装**：
+```bash
+pip install python-pptx PyMuPDF
+```
+
+**配图插入位置原则**：
+- 每篇**头条/第一个主题**配一张图（真实产品图或信息图）
+- 每个**子章节**最多一张
+- 不要在所有段落之间插图——留白比堆图更专业
+
+**技术实现（图文消息）**：
+
+```markdown
+# 文章 Markdown 中这样写配图
+![图片描述](https://真实URL.png)
+
+# publish 时自动处理：
+# 1. WeChatImageUploader.upload_all() 下载外部图片
+# 2. 上传到 cgi-bin/media/uploadimg → 返回 mmbiz CDN URL
+# 3. render_wechat_html() 把 ![](url) 渲染为 <img src="mmbiz.qpic.cn/...">
+```
+
+**配图来源参考**：
+
+| 类型 | 推荐来源 | 示例 |
+|------|---------|------|
+| 数据图表 | **PPT / 前端页面生成** | 模型横评、数据对比（`pptx` skill） |
+| 流程架构 | **PPT / 前端页面生成** | Agent 工作流（`pptx` skill 或 Playwright） |
+| 模型/产品 logo | GitHub/官网 og:image | `openai.com` → og:image |
+| 新闻事件图 | 新闻媒体 og:image | `aibase.com/news/xxx` → og:image |
+| 封面图 | `cover_image.py` | 公众号封面（模板生成） |
+
 ### Step 6: Write Article or Card Content
 
 **Option A: Write markdown article（图文消息）**

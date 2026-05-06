@@ -19,7 +19,7 @@ class WeChatImageUploader:
     def __init__(
         self,
         access_token: str,
-        upload_url: str = "https://api.weixin.qq.com/cgi-bin/media/upload",
+        upload_url: str = "https://api.weixin.qq.com/cgi-bin/media/uploadimg",
         http_client: Any | None = None,
         max_workers: int = MAX_CONCURRENT_UPLOADS,
     ) -> None:
