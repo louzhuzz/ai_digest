@@ -258,9 +258,9 @@ def cmd_publish(title: str, file_path: str | None = None) -> None:
     _json_dump(result, sys.stdout)
 
 
-def cmd_cover(title: str, output: str) -> None:
+def cmd_cover(title: str, subtitle: str, output: str) -> None:
     """生成公众号封面图。"""
-    data = generate_cover_image(title)
+    data = generate_cover_image(title, subtitle=subtitle)
     with open(output, "wb") as f:
         f.write(data)
 
@@ -300,9 +300,10 @@ def _publish_wrapper() -> None:
 def _cover_wrapper() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--title", required=True)
+    parser.add_argument("--subtitle", default="")
     parser.add_argument("--output", required=True)
     args = parser.parse_known_args()[0]
-    cmd_cover(args.title, args.output)
+    cmd_cover(args.title, args.subtitle, args.output)
 
 
 def _cards_wrapper() -> None:

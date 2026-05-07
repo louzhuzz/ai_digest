@@ -8,7 +8,7 @@ from .web_news import WebNewsIndexCollector
 from .zhihu import ZhihuHotListCollector
 from .weibo import WeiboHotSearchCollector
 from .base import BaseCollector
-from .registry import CompositeCollector, BoundGitHubTrendingCollector, BoundHNCollector, BoundHFTrendingCollector, BoundWebNewsCollector, BoundRSSCollector, BoundZhihuCollector, BoundWeiboCollector
+from .registry import CompositeCollector, BoundFactory, BoundGitHubTrendingCollector, BoundHNCollector, BoundHFTrendingCollector, BoundWebNewsCollector, BoundRSSCollector, BoundZhihuCollector, BoundWeiboCollector
 from .keywords import filter_by_keywords
 
 __all__ = [

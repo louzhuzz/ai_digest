@@ -18,6 +18,16 @@ from .collectors.web_news import WebNewsIndexCollector
 from .collectors.rss import RSSCollector
 from .collectors.zhihu import ZhihuHotListCollector
 from .collectors.weibo import WeiboHotSearchCollector
+from .collectors import (
+    BoundGitHubTrendingCollector,
+    BoundHNCollector,
+    BoundHFTrendingCollector,
+    BoundWebNewsCollector,
+    BoundRSSCollector,
+    BoundZhihuCollector,
+    BoundWeiboCollector,
+    BoundFactory,
+)
 from .publishers.wechat import WeChatDraftPublisher
 from .settings import AppSettings
 from .wechat_image_uploader import WeChatImageUploader
@@ -34,20 +44,17 @@ class SourceSpec:
     allowed_path_prefixes: tuple[str, ...] = ()
 
 
-# ── 已知 collector 的构造参数（URL 参数从 SourceSpec.url 注入） ────────
+# ── kind → (collector_cls, bound_cls, ctor_kwargs) 映射 ────────────────
 
-_COLLECTOR_CTOR_KWARGS: dict[str, dict] = {
-    "github_trending": {},
-    "hn_frontpage": {},
-    "hf_trending": {},
-    "web_news_index": {},  # allowed_path_prefixes 从 SourceSpec 注入
-    "rss": {},
-    "zhihu_hot": {},
-    "weibo_hot": {},
+_COLLECTOR_MAP = {
+    "github_trending":  (GitHubTrendingCollector,  BoundGitHubTrendingCollector,  {}),
+    "hn_frontpage":     (HNFrontPageCollector,     BoundHNCollector,              {}),
+    "hf_trending":      (HFTrendingCollector,      BoundHFTrendingCollector,      {}),
+    "web_news_index":   (WebNewsIndexCollector,    BoundWebNewsCollector,         {}),
+    "rss":              (RSSCollector,             BoundRSSCollector,             {}),
+    "zhihu_hot":        (ZhihuHotListCollector,    BoundZhihuCollector,           {}),
+    "weibo_hot":        (WeiboHotSearchCollector,  BoundWeiboCollector,           {}),
 }
-
-# 仅 zhihu_hot / weibo_hot 不需要 URL 参数（collect() 无参数）
-_NO_URL_KINDS = {"zhihu_hot", "weibo_hot"}
 
 
 # ── 默认数据源清单 ──────────────────────────────────────────────────────
@@ -79,46 +86,20 @@ def build_default_source_specs() -> list[SourceSpec]:
 # ── BoundCollector 工厂 ──────────────────────────────────────────────────
 
 def _make_bound(spec: SourceSpec):
-    """根据 SourceSpec 构造对应的 BoundCollector。"""
-    kind = spec.kind
+    """根据 SourceSpec 查找注册表并构造 BoundCollector。"""
+    entry = _COLLECTOR_MAP.get(spec.kind)
+    if entry is None:
+        raise ValueError(f"Unknown collector kind: {spec.kind}")
+    collector_cls, bound_cls, base_kwargs = entry
 
-    if kind == "github_trending":
-        collector = GitHubTrendingCollector()
-        from .collectors import BoundGitHubTrendingCollector
-        return BoundGitHubTrendingCollector(collector, spec.url)
+    # 从 SourceSpec 注入运行时参数（仅需 source_name 的收集器）
+    ctor_kwargs = dict(base_kwargs)
+    if spec.kind in ("web_news_index", "rss"):
+        ctor_kwargs["source_name"] = spec.name
+    if spec.kind == "web_news_index":
+        ctor_kwargs["allowed_path_prefixes"] = spec.allowed_path_prefixes
 
-    elif kind == "hn_frontpage":
-        collector = HNFrontPageCollector()
-        from .collectors import BoundHNCollector
-        return BoundHNCollector(collector, spec.url)
-
-    elif kind == "hf_trending":
-        collector = HFTrendingCollector()
-        from .collectors import BoundHFTrendingCollector
-        return BoundHFTrendingCollector(collector, spec.url)
-
-    elif kind == "web_news_index":
-        collector = WebNewsIndexCollector(spec.name, allowed_path_prefixes=spec.allowed_path_prefixes)
-        from .collectors import BoundWebNewsCollector
-        return BoundWebNewsCollector(collector, spec.url)
-
-    elif kind == "rss":
-        collector = RSSCollector(spec.name)
-        from .collectors import BoundRSSCollector
-        return BoundRSSCollector(collector, spec.url)
-
-    elif kind == "zhihu_hot":
-        collector = ZhihuHotListCollector()
-        from .collectors import BoundZhihuCollector
-        return BoundZhihuCollector(collector)
-
-    elif kind == "weibo_hot":
-        collector = WeiboHotSearchCollector()
-        from .collectors import BoundWeiboCollector
-        return BoundWeiboCollector(collector)
-
-    else:
-        raise ValueError(f"Unknown collector kind: {kind}")
+    return BoundFactory.make(spec, collector_cls, bound_cls, ctor_kwargs)
 
 
 # ── 组件构建入口 ────────────────────────────────────────────────────────

@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Collector 注册表 + 统一工厂。
+Collector 注册表 + 统一工厂 + CompositeCollector。
 
 用法：
-    from collectors.base import BaseCollector, COLLECTOR_REGISTRY, BoundFactory
-
-    cls, ctor_kwargs, bound_cls = COLLECTOR_REGISTRY["github_trending"]
-    bound = BoundFactory.make_bound(bound_cls, cls(), source_spec)
+    bound = BoundFactory.make(source_spec, CollectorCls, BoundCls, ctor_kwargs)
 """
 from __future__ import annotations
 
@@ -35,14 +32,7 @@ class BoundCollectorSpec:
 
 # ── 注册表 ────────────────────────────────────────────────────────────────
 
-COLLECTOR_REGISTRY: dict[str, BoundCollectorSpec] = {
-    "github_trending": BoundCollectorSpec(
-        bound_cls=None,  # filled below after class definitions
-        collector_cls=None,
-        ctor_kwargs={},
-        collect_arg="page_url",
-    ),
-}
+# 完整的注册在类定义之后的第 118 行重新赋值
 
 
 # ── BoundCollector 基类（原有逻辑保留，供注册表使用） ──────────────────
@@ -173,7 +163,8 @@ class CompositeCollector:
             try:
                 items.extend(collector.collect())
             except Exception as exc:
-                self.errors.append(str(exc))
+                collector_name = getattr(collector, 'name', type(collector).__name__)
+                self.errors.append(f"[{collector_name}] {type(exc).__name__}: {exc}")
         return items
 
 

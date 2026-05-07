@@ -1,0 +1,13 @@
+# ai_digest 核心依赖
+pillow>=10.0
+fastapi>=0.100
+uvicorn>=0.20
+playwright>=1.40
+markdown>=3.4
+
+# 可选：PPT 截图配图流程（SKILL.md Step 5）
+# python-pptx>=0.6
+# PyMuPDF>=1.23
+
+# 可选：DashScope AI 生图（已归档）
+# requests>=2.28
