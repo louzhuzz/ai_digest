@@ -89,14 +89,20 @@ class WeChatImageUploader:
         if not matches:
             return markdown
 
-        # Collect all original URLs for concurrent processing
-        url_to_match = {url: match for match, url in matches}
-        urls = list(url_to_match.keys())
+        # Collect URLs that need uploading (skip existing WeChat CDN URLs)
+        need_upload = []
+        for match_str, url in matches:
+            if 'mmbiz.qpic.cn' in url:
+                continue  # already a WeChat CDN URL
+            need_upload.append((match_str, url))
 
-        # Submit all uploads concurrently
+        if not need_upload:
+            return markdown  # all images are already CDN URLs
+
+        # Submit uploads concurrently
         future_to_url = {
             self._executor.submit(self._upload_single, url): url
-            for url in urls
+            for _, url in need_upload
         }
 
         # Collect results
@@ -108,6 +114,8 @@ class WeChatImageUploader:
         # Build result with fallback to original on failure
         def replace(match):
             alt, url = match.groups()
+            if 'mmbiz.qpic.cn' in url:
+                return match.group(0)  # keep existing CDN URL unchanged
             cdn = url_to_cdn.get(url)
             if cdn:
                 return f"![{alt}]({cdn})"

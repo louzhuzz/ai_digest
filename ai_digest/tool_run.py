@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from .cover_image import generate_cover_image
 from .defaults import build_default_collector, build_default_publisher
 from .dedupe import RecentDedupeFilter
+from .github_client import fetch_full_repo_data, GitHubRepoData
 from .models import DigestItem
 from .settings import load_settings
 from .simhash_utils import compute_text_simhash
@@ -275,6 +276,25 @@ def cmd_cards(input_path: str, output_dir: str) -> None:
     _json_dump(result, sys.stdout)
 
 
+def cmd_github_share(repo_input: str, title: str | None = None) -> None:
+    """获取 GitHub 仓库数据，输出 JSON（供 Sisyphus 后续撰写文章）。
+
+    纯数据获取，不发布草稿。Sisyphus 拿到 JSON 后自主撰写文章，
+    再调用 publish --file 发布。
+
+    Args:
+        repo_input: GitHub 仓库，格式 owner/repo 或完整 URL
+        title: 可选，默认 "{repo} 推荐"
+    """
+    repo_data: GitHubRepoData = fetch_full_repo_data(repo_input)
+    result = repo_data.to_dict()
+    if title:
+        result["article_title"] = title
+    else:
+        result["article_title"] = f"{repo_data.metadata.repo} 推荐"
+    _json_dump(result, sys.stdout)
+
+
 # ── CLI 入口 ────────────────────────────────────────────
 
 _COMMANDS = {
@@ -286,6 +306,7 @@ _COMMANDS = {
     "cover": ("生成封面图", lambda: _cover_wrapper()),
     "cards": ("生成贴图卡片 PNG（从 JSON）", lambda: _cards_wrapper()),
     "publish-newspic": ("发布贴图（newspic）草稿", lambda: _publish_newspic_wrapper()),
+    "github-share": ("获取 GitHub 仓库数据（供后续撰写）", lambda: _github_share_wrapper()),
 }
 
 
@@ -352,6 +373,14 @@ def _publish_newspic_wrapper() -> None:
         with open(args.content_file, "r", encoding="utf-8") as f:
             content = f.read()
     cmd_publish_newspic(args.title, images, content=content, dry_run=args.dry_run)
+
+
+def _github_share_wrapper() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", required=True, help="GitHub 仓库（owner/repo 或完整 URL）")
+    parser.add_argument("--title", default=None, help="文章标题（默认：{repo} 推荐）")
+    args = parser.parse_known_args()[0]
+    cmd_github_share(args.repo, title=args.title)
 
 
 def build_parser() -> argparse.ArgumentParser:

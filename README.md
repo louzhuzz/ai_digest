@@ -6,10 +6,11 @@ AI 开发者热点日报生成与公众号草稿发布工具。
 
 ## 功能特性
 
-- **多源收集**：GitHub Trending / Hacker News / HuggingFace / OpenAI / Anthropic / Google AI / 机器之心 / 新智元 / 量子位 / 雷锋网 / 爱范儿 / DeepMind Blog / DeepLearning AI / Solidot / InfoQ / iThome / 橘鸦 Juya RSS / 多个 GitHub Releases RSS（DeepSeek / Qwen / 智谱）
-- **跨运行去重**：SQLite 状态库 + simhash 文本相似度
-- **LLM 模式**：配置 ARK API Key 后可生成完整文章（含大纲生成 → 全文写作 → 质量检查）
+- **多源收集**：23 个信源覆盖 GitHub Trending / Hacker News / HuggingFace / OpenAI / Anthropic / Google AI / 机器之心 / 新智元 / 量子位 / 雷锋网 / 爱范儿 / DeepMind Blog / DeepLearning AI / Solidot / InfoQ / iThome / 橘鸦 Juya RSS / OpenClaw Blog / Kiro Blog / NVIDIA Blog / 商汤 News / OpenRouter Announcements / 多个 GitHub Releases RSS（DeepSeek / Qwen / 智谱）
+- **跨运行去重**：SQLite 状态库 + simhash 文本相似度（7 天窗口）
+- **AI 驱动**：agent 自主完成时效过滤、多源交叉验证、主次判断、配图规划、文章写作，无固定模板
 - **贴图发布（newspic）**：结构化 JSON → 10 种卡片模板（cover/content/list/data/compare/closing/content-grid/content-hero/content-steps/content-quote）→ Playwright 截图 → 永久素材上传 → 公众号草稿
+- **GitHub 项目分享帖**：一键获取仓库元数据（stars/forks/languages/releases/README）→ agent 自主撰写项目推荐文章
 - **Web 工作台**：生成 → 预览 → 编辑 → 提交
 
 ## 快速开始
@@ -17,41 +18,57 @@ AI 开发者热点日报生成与公众号草稿发布工具。
 ### 安装依赖
 
 ```bash
-pip install pillow fastapi uvicorn httpx playwright
+pip install -r requirements.txt
 playwright install chromium --with-deps
 ```
 
 ### 配置 `.env`
 
 ```env
+# 微信公众号（可选，WECHAT_DRY_RUN=1 时不调用微信接口）
 WECHAT_APPID=your_appid
 WECHAT_APPSECRET=your_appsecret
 WECHAT_DRY_RUN=1
 
+# 火山 ARK（可选，配置后启用 LLM 模式自动生成文章）
 ARK_API_KEY=your_ark_key
 ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ARK_MODEL=deepseek-chat
 
+# GitHub Token（可选，配置后 github-share 命令自动使用）
+GITHUB_TOKEN=your_github_token
+
+# SQLite 状态库路径（去重用）
 AI_DIGEST_STATE_DB=data/state.db
 ```
 
-### CLI 流水线
+### 每日日报流水线
 
 ```bash
-# 1. 收集（多来源并行抓取，结果写入 data/items_collected.json）
+# 1. 收集（23 来源并行抓取，结果写入 data/items_collected.json）
 python -m ai_digest.tool_run collect
 
 # 2. 去重（读取上一步文件，stdout 输出去重后 JSON）
 python -m ai_digest.tool_run dedup
 
 # 3. AI 分析 + 写作（agent 自主完成）
-#    → 生成 data/article.md
+#    → 时效过滤 → 搜索验证 → 判断主线 → 生成 data/article.md
 
-# 4. 发布公众号草稿（--file 避免 PowerShell 编码问题）
+# 4. 发布公众号草稿
 python -m ai_digest.tool_run publish --title "今日标题" --file data/article.md
 
 # 5. 持久化去重状态
 python -m ai_digest.tool_run persist
+```
+
+### GitHub 项目分享帖
+
+```bash
+# 获取仓库元数据（JSON）
+python -m ai_digest.tool_run github-share --repo owner/repo
+
+# agent 自主写文章后发布
+python -m ai_digest.tool_run publish --title "项目名" --file data/article.md
 ```
 
 ### 贴图发布（newspic）
@@ -65,9 +82,6 @@ python -m ai_digest.tool_run publish-newspic \
   --title "AI 速递" \
   --image-dir data/cards \
   --content-file data/content.txt
-
-# dry-run 验证（不调用微信发布接口）
-python -m ai_digest.tool_run publish-newspic --title "AI 速递" --image-dir data/cards --dry-run
 ```
 
 ### Web 工作台
@@ -86,9 +100,32 @@ python -m ai_digest.webapp.app
 | `compose` | stdin JSON → stdout Markdown（不发布） |
 | `persist` | 去重状态写入 SQLite |
 | `publish` | 发布公众号图文草稿 |
-| `cover` | 生成封面图（单卡） |
+| `cover` | 生成封面图（PIL，900×383 微信封面比例） |
 | `cards` | 生成贴图卡片 PNG（多卡，支持 10 种模板） |
 | `publish-newspic` | 发布贴图（newspic），支持 `--dry-run` |
+| `github-share` | 获取 GitHub 仓库元数据（JSON），供 agent 写分享帖 |
+
+## 数据来源（23 个信源）
+
+| 来源 | 类型 | 备注 |
+|------|------|------|
+| GitHub Trending | 趋势 | 每日热门项目 |
+| Hacker News | 趋势 | AI 相关讨论 |
+| HuggingFace Trending | 趋势 | 模型/数据集热度 |
+| OpenAI News | 官方 | 产品发布 |
+| Anthropic News | 官方 | Claude 更新 |
+| Google AI / Gemini | 官方 | Gemini 动态 |
+| 橘鸦 Juya RSS | 聚合 | 中文 AI 日报标杆 |
+| DeepSeek / Qwen / 智谱 GitHub Releases | 官方 | 版本发布 |
+| OpenRouter Announcements | 聚合 | 模型定价/SDK/API 更新 |
+| 机器之心 / 新智元 / 量子位 | 媒体 | AI 垂直媒体 |
+| 雷锋网 / 爱范儿 | 博客 | 科技博客 |
+| DeepMind Blog / DeepLearning AI | 博客 | 研究/教育 |
+| Solidot / InfoQ / iThome | 资讯 | 综合资讯 |
+| OpenClaw Blog | 官方 | OpenClaw 动态 |
+| Kiro Blog | 官方 | Kiro IDE 动态 |
+| NVIDIA Blog | 官方 | GPU/加速计算 |
+| 商汤 News | 官方 | 国内 AI 公司 |
 
 ## 贴图卡片系统
 
@@ -107,7 +144,7 @@ python -m ai_digest.webapp.app
 | `content-steps` | 步骤卡片：序号 + 标签 + 描述 |
 | `content-quote` | 引用卡片：大引言 + 出处 |
 
-### Tier 响应式字体
+### 响应式字体
 
 字号根据卡片总数自动连续缩放（Python 计算，CSS 变量注入，无需 JS）：
 
@@ -118,70 +155,41 @@ python -m ai_digest.webapp.app
 10 cards → title: 44px (最小)
 ```
 
-### cards.json 格式
-
-```json
-[
-  {
-    "card_type": "cover",
-    "title": "开源打破闭源定价霸权",
-    "subtitle": "AI Daily",
-    "footer_note": "AI 开发者日报"
-  },
-  {
-    "card_type": "content",
-    "page_num": 1,
-    "title": "大模型训练成本下降",
-    "body": "各大厂商纷纷降价，竞争激烈",
-    "highlight_text": "成本下降 90%"
-  }
-]
-```
-
-## 数据来源
-
-| 来源 | 类型 |
-|------|------|
-| GitHub Trending | 趋势 |
-| Hacker News AI | 趋势 |
-| HuggingFace Trending | 趋势 |
-| OpenAI News | 新闻 |
-| Anthropic News | 新闻 |
-| Google AI / Gemini | 新闻 |
-| 机器之心 / 新智元 / 量子位 | 媒体 |
-| 雷锋网 / 爱范儿 | 博客 |
-| DeepMind Blog / DeepLearning AI 周报 | 博客 |
-| Solidot / InfoQ / iThome | 资讯 |
-| 橘鸦 Juya RSS | 聚合 |
-| DeepSeek / Qwen / 智谱 GitHub Releases | 官方 |
-
 ## 开发
 
 ### 运行测试
 
 ```bash
 python -m unittest discover -s tests -v
-python -m unittest tests/test_pipeline.py -v
 ```
 
 ### 核心文件
 
 ```
 ai_digest/
-├── tool_run.py          # CLI 入口（collect/dedup/publish/cards/...）
-├── pipeline.py          # 主管道：collect→dedup→rank→summarize→compose→publish
-├── defaults.py          # 默认组件工厂（build_default_*）
-├── models.py            # DigestItem / EventCluster 数据模型
-├── settings.py          # 配置加载（.env → AppSettings）
-├── state_store.py       # SQLite 去重状态
-├── image_card_generator.py  # 贴图卡片渲染（10 种模板）
+├── tool_run.py              # CLI 入口（collect/dedup/publish/cards/github-share/...）
+├── pipeline.py              # 主管道：collect→dedup→rank→summarize→compose→publish
+├── defaults.py              # 默认组件工厂（build_default_*）
+├── models.py                # DigestItem / EventCluster 数据模型
+├── settings.py              # 配置加载（.env → AppSettings）
+├── state_store.py           # SQLite 去重状态
+├── http_client.py           # HTTP 客户端（Chrome UA + 指数退避重试 + 超时）
+├── image_card_generator.py  # 贴图卡片渲染（10 种模板 + 响应式字体）
+├── cover_image.py           # 封面图 PIL 生成（900×383 微信封面比例）
+├── wechat_renderer.py       # Markdown → 微信公众号 HTML（内联样式）
+├── wechat_image_uploader.py # 微信图片上传（uploadimg → CDN URL）
+├── github_client.py         # GitHub API 客户端（退避重试 + raw README）
 ├── collectors/
-│   ├── github.py        # GitHubTrendingCollector
-│   ├── hn.py            # HNFrontPageCollector
-│   ├── huggingface.py   # HFTrendingCollector
-│   ├── web_news.py      # WebNewsIndexCollector（机器之心/新智元/量子位等）
-│   ├── rss.py           # RSSCollector（支持 RSS 和 Atom）
-│   └── registry.py      # BoundCollector 统一工厂
+│   ├── github.py            # GitHubTrendingCollector
+│   ├── hn.py                # HNFrontPageCollector
+│   ├── huggingface.py       # HFTrendingCollector
+│   ├── web_news.py          # WebNewsIndexCollector（13 个 AI 源站）
+│   ├── rss.py               # RSSCollector（支持 RSS + Atom）
+│   └── registry.py          # BoundCollector 统一工厂 + 注册表
 └── publishers/
-    └── wechat.py        # WeChatDraftPublisher
+    └── wechat.py            # WeChatDraftPublisher（含 newspic 贴图发布）
 ```
+
+## License
+
+MIT

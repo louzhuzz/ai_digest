@@ -27,6 +27,10 @@ PUBLIC_PLATFORM_SOURCES = {
     "新智元",
     "量子位",
     "CSDN AI",
+    "OpenClaw",
+    "Kiro",
+    "NVIDIA Blog",
+    "商汤",
 }
 PUBLIC_AI_TITLE_TERMS = (
     "ai",

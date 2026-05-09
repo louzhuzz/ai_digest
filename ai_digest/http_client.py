@@ -1,20 +1,67 @@
 from __future__ import annotations
 
+import logging
 import re
-from urllib import request
+import time
+from urllib import request, error
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; OpenClawDigest/1.0; +https://openai.com)",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     "Accept": "application/xml,text/xml,text/html,application/xhtml+xml",
 }
-DEFAULT_TIMEOUT_SECONDS = 15
+
+# ── 超时配置 ──────────────────────────────────────────────────────────────
+CONNECT_TIMEOUT = 5       # TCP 连接建立超时（秒）
+READ_TIMEOUT = 15         # 读取响应体超时（秒）
+
+# ── 重试配置 ──────────────────────────────────────────────────────────────
+MAX_RETRIES = 3           # 最大重试次数
+BACKOFF_BASE = 1.0        # 退避基数（秒）
+BACKOFF_FACTOR = 1.5      # 退避倍数
+BACKOFF_MAX = 8.0         # 最大退避时间（秒）
+
+# 可重试的 HTTP 状态码
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
+# ── 向后兼容别名 ──────────────────────────────────────────────────────
+DEFAULT_TIMEOUT_SECONDS = READ_TIMEOUT
 
 
-def open_url(url: str, http_client: object | None = None, timeout: int = DEFAULT_TIMEOUT_SECONDS):
+def _is_retryable(exc: Exception) -> bool:
+    """判断异常是否可重试。"""
+    if isinstance(exc, error.HTTPError):
+        return exc.code in _RETRYABLE_STATUS
+    if isinstance(exc, error.URLError):
+        # 连接失败、DNS 失败、超时等
+        return True
+    if isinstance(exc, TimeoutError, OSError):
+        return True
+    return False
+
+
+def open_url(url: str, http_client: object | None = None, timeout: int = READ_TIMEOUT):
+    """发起 HTTP 请求，自动重试可恢复错误。"""
     req = request.Request(url, headers=DEFAULT_HEADERS)
     opener = http_client or request.urlopen
-    return opener(req, timeout=timeout)
+
+    last_exc = None
+    for attempt in range(1 + MAX_RETRIES):
+        try:
+            return opener(req, timeout=timeout)
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= MAX_RETRIES or not _is_retryable(exc):
+                raise
+            delay = min(BACKOFF_BASE * (BACKOFF_FACTOR ** attempt), BACKOFF_MAX)
+            logger.warning(
+                "[http_client] %s attempt %d/%d failed: %s; retrying in %.1fs",
+                url, attempt + 1, 1 + MAX_RETRIES, exc, delay,
+            )
+            time.sleep(delay)
+    raise last_exc  # unreachable, but satisfies type checker
 
 
 def decode_response(response) -> str:

@@ -51,6 +51,7 @@ class ArkCredentials:
 class AppSettings:
     wechat: WeChatCredentials | None
     ark: ArkCredentials | None
+    github_token: str
     dry_run: bool
     draft_mode: bool
     llm_enabled: bool
@@ -89,9 +90,11 @@ def load_settings(environ: dict[str, str] | None = None) -> AppSettings:
     keywords_raw = env.get("AI_DIGEST_KEYWORDS", "").strip()
     keywords = tuple(k.strip() for k in keywords_raw.split(",") if k.strip())
     llm_enabled = bool(ark_api_key and ark_base_url and ark_model)
+    github_token = env.get("GITHUB_TOKEN", "").strip()
     return AppSettings(
         wechat=wechat,
         ark=ark,
+        github_token=github_token,
         dry_run=dry_run,
         draft_mode=draft_mode,
         llm_enabled=llm_enabled,

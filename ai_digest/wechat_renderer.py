@@ -32,26 +32,32 @@ THEME = {
             "font-weight": "700",
             "color": "#111111",
             "line-height": "1.4",
-            "margin-top": "24px",
-            "margin-bottom": "12px",
-            "border-bottom": "2px solid #3b82f6",
-            "padding-bottom": "8px",
+            "margin-top": "28px",
+            "margin-bottom": "14px",
+            "border-bottom": "3px solid #2563eb",
+            "padding-bottom": "10px",
         },
         "h2": {
             "font-size": "18px",
             "font-weight": "700",
-            "color": "#1f2937",
+            "color": "#ffffff",
+            "background": "#2563eb",
+            "display": "inline-block",
+            "padding": "6px 16px 4px",
+            "border-radius": "4px",
             "line-height": "1.5",
-            "margin-top": "20px",
-            "margin-bottom": "10px",
+            "margin-top": "24px",
+            "margin-bottom": "14px",
         },
         "h3": {
             "font-size": "16px",
             "font-weight": "700",
-            "color": "#334155",
+            "color": "#1e293b",
+            "border-left": "4px solid #2563eb",
+            "padding-left": "12px",
             "line-height": "1.5",
-            "margin-top": "16px",
-            "margin-bottom": "8px",
+            "margin-top": "20px",
+            "margin-bottom": "10px",
         },
         "p": {
             "font-size": "15px",
@@ -63,22 +69,23 @@ THEME = {
         "strong": {"font-weight": "700", "color": "#111111"},
         "em": {"font-style": "italic"},
         "a": {
-            "color": "#3b82f6",
+            "color": "#2563eb",
             "text-decoration": "none",
             "border-bottom": "1px solid #93c5fd",
         },
         "img": {
-            "max-width": "100%",
+            "max-width": "90%",
             "height": "auto",
             "display": "block",
-            "margin": "12px auto",
-            "border-radius": "4px",
+            "margin": "16px auto",
+            "border-radius": "6px",
+            "box-shadow": "0 2px 8px rgba(0,0,0,0.08)",
         },
         "blockquote": {
-            "border-left": "4px solid #3b82f6",
-            "background": "#f8fafc",
+            "border-left": "4px solid #2563eb",
+            "background": "#f0f4ff",
             "margin": "16px 0",
-            "padding": "12px 16px",
+            "padding": "14px 18px",
             "border-radius": "0 8px 8px 0",
         },
         "blockquote_p": {
@@ -89,9 +96,9 @@ THEME = {
             "font-style": "italic",
         },
         "code": {
-            "background": "#f1f5f9",
-            "color": "#1e293b",
-            "padding": "2px 6px",
+            "background": "#f0f4ff",
+            "color": "#2563eb",
+            "padding": "1px 6px",
             "border-radius": "4px",
             "font-size": "13px",
             "font-family": "'SF Mono', Consolas, 'Courier New', monospace",
@@ -116,22 +123,24 @@ THEME = {
             "display": "block",
         },
         "th": {
-            "background": "#f1f5f9",
-            "padding": "10px 12px",
+            "background": "#2563eb",
+            "padding": "10px 14px",
             "text-align": "left",
             "font-weight": "600",
-            "color": "#1e293b",
-            "border-bottom": "2px solid #e5e7eb",
+            "color": "#ffffff",
+            "font-size": "14px",
+            "border": "none",
         },
         "td": {
-            "padding": "10px 12px",
+            "padding": "10px 14px",
             "color": "#374151",
+            "font-size": "14px",
             "border-bottom": "1px solid #e5e7eb",
         },
         "hr": {"margin": "24px 0", "border": "none", "border-top": "1px solid #e5e7eb"},
         "ol": {"padding-left": "24px", "margin": "12px 0"},
         "ul": {"padding-left": "24px", "margin": "12px 0"},
-        "li": {"margin-bottom": "6px", "line-height": "1.7", "color": "#374151"},
+        "li": {"margin-bottom": "2px", "line-height": "1.7", "color": "#374151"},
         "sup": {"font-size": "12px", "color": "#3b82f6", "vertical-align": "super"},
         "footnote_ref": {
             "font-size": "12px",
@@ -692,15 +701,18 @@ def _style_blockquotes(html_text: str) -> str:
         if level_match:
             # Nested
             border_color = "#8b5cf6"
+            bg_color = "#f5f3ff"
         elif re.search(r"<blockquote[^>]*>.*?<blockquote", inner, re.DOTALL):
             border_color = "#10b981"
+            bg_color = "#f0fdf4"
         else:
-            border_color = "#3b82f6"
+            border_color = "#2563eb"
+            bg_color = "#f0f4ff"
 
         blockquote_style = (
             f"border-left:4px solid {border_color};"
-            f"background:#f8fafc;margin:16px 0;"
-            f"padding:12px 16px;border-radius:0 8px 8px 0"
+            f"background:{bg_color};margin:16px 0;"
+            f"padding:14px 18px;border-radius:0 8px 8px 0"
         )
         return f'<blockquote style="{blockquote_style}">{inner}</blockquote>'
 
@@ -720,6 +732,9 @@ def render(markdown_text: str) -> str:
 
     try:
         text = markdown_text
+        # Strip BOM if present (PowerShell Set-Content with UTF8 encoding adds BOM)
+        if text.startswith('\ufeff'):
+            text = text[1:]
 
         # F1: CJK English spacing
         text = fix_cjk_spacing(text)

@@ -17,8 +17,6 @@ if TYPE_CHECKING:
     from .huggingface import HFTrendingCollector
     from .web_news import WebNewsIndexCollector
     from .rss import RSSCollector
-    from .zhihu import ZhihuHotListCollector
-    from .weibo import WeiboHotSearchCollector
 
 
 @dataclass
@@ -32,10 +30,8 @@ class BoundCollectorSpec:
 
 # ── 注册表 ────────────────────────────────────────────────────────────────
 
-# 完整的注册在类定义之后的第 118 行重新赋值
 
-
-# ── BoundCollector 基类（原有逻辑保留，供注册表使用） ──────────────────
+# ── BoundCollector 基类 ──────────────────────────────────────────────────
 
 class BoundCollector:
     def collect(self) -> list:
@@ -87,22 +83,6 @@ class BoundRSSCollector(BoundCollector):
         return self.collector.collect(self.page_url)
 
 
-class BoundZhihuCollector(BoundCollector):
-    def __init__(self, collector) -> None:
-        self.collector = collector
-
-    def collect(self) -> list:
-        return self.collector.collect()
-
-
-class BoundWeiboCollector(BoundCollector):
-    def __init__(self, collector) -> None:
-        self.collector = collector
-
-    def collect(self) -> list:
-        return self.collector.collect()
-
-
 # ── 更新注册表（在类定义之后） ─────────────────────────────────────────
 
 COLLECTOR_REGISTRY = {
@@ -136,18 +116,6 @@ COLLECTOR_REGISTRY = {
         ctor_kwargs={},
         collect_arg="feed_url",
     ),
-    "zhihu_hot": BoundCollectorSpec(
-        bound_cls=BoundZhihuCollector,
-        collector_cls=None,
-        ctor_kwargs={},
-        collect_arg="none",
-    ),
-    "weibo_hot": BoundCollectorSpec(
-        bound_cls=BoundWeiboCollector,
-        collector_cls=None,
-        ctor_kwargs={},
-        collect_arg="none",
-    ),
 }
 
 
@@ -173,7 +141,7 @@ class BoundFactory:
     统一工厂：根据 SourceSpec 构造对应的 BoundCollector。
 
     用法：
-        bound = BoundFactory.make(spec, ZhihuHotListCollector, BoundZhihuCollector, {})
+        bound = BoundFactory.make(spec, SomeCollector, BoundSomeCollector, {})
     """
 
     @staticmethod
