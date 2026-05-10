@@ -34,7 +34,11 @@ TITLE_BOT  = 320
 FONT_CANDIDATES = [
     # 来自环境变量（最优先）
     os.environ.get("AI_DIGEST_FONT_PATH", ""),
-    # Windows
+    # Windows (WSL mount path)
+    "/mnt/c/Windows/Fonts/msyhbd.ttc",
+    "/mnt/c/Windows/Fonts/msyh.ttc",
+    "/mnt/c/Windows/Fonts/simhei.ttf",
+    # Windows (native)
     r"C:\Windows\Fonts\msyhbd.ttc",
     r"C:\Windows\Fonts\msyh.ttc",
     r"C:\Windows\Fonts\simhei.ttf",
