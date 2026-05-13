@@ -28,3 +28,18 @@ openclaw_summary.pdf
 tesseract_rapid_wrapper.py
 run_publish.bat
 run_webapp.bat
+
+# 临时工作脚本（每次都生成的独立文件，非项目代码）
+_verify_news.py
+make_cover.py
+make_stats_pptx.py
+upload_wechat.py
+
+# 文章草稿输出
+articles/
+
+# 工具 MCP 缓存
+.playwright-mcp/
+node_modules/
+package.json
+package-lock.json

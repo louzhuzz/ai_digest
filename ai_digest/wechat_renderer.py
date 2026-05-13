@@ -426,7 +426,53 @@ def md_to_html(text: str) -> str:
     )
 
 
-# ── F6: External Links → Footnotes ───────────────────────────────────────────
+# ── F6: Flatten ordered/unordered lists to plain paragraphs ───────────────────
+# WeChat 草稿箱编辑器在打开 HTML 草稿时，会自动将 <ol>/<ul> 识别为列表块。
+# 如果列表项之间有空白段落，编辑器会打断自动编号（1. (空) 2. (内容) 3. (空) 4. (内容)）。
+# 将列表全部拍平为带手动标号的段落 <p>，彻底规避此问题。
+
+
+def _flatten_ordered_list(match: re.Match) -> str:
+    """将 <ol> 替换为手动编号的段落。"""
+    items = re.findall(r"<li>(.*?)</li>", match.group(0), re.DOTALL)
+    result_parts: list[str] = []
+    for idx, item_content in enumerate(items, 1):
+        # 去除 li 内部可能由 nl2br 引入的 <p> 标签
+        item_content = re.sub(r"</?p[^>]*>", "", item_content)
+        item_content = item_content.strip()
+        result_parts.append(
+            f'<p><strong style="font-weight:700;color:#111">{idx}.</strong> '
+            f"{item_content}</p>"
+        )
+    return "\n".join(result_parts)
+
+
+def _flatten_unordered_list(match: re.Match) -> str:
+    """将 <ul> 替换为 bullet 段落。"""
+    items = re.findall(r"<li>(.*?)</li>", match.group(0), re.DOTALL)
+    result_parts: list[str] = []
+    for item_content in items:
+        item_content = re.sub(r"</?p[^>]*>", "", item_content)
+        item_content = item_content.strip()
+        result_parts.append(
+            f'<p><strong style="font-weight:700;color:#111;margin-right:6px">'
+            f"\u2022</strong> {item_content}</p>"
+        )
+    return "\n".join(result_parts)
+
+
+_OL_RE = re.compile(r"<ol[^>]*>(.*?)</ol>", re.DOTALL | re.IGNORECASE)
+_UL_RE = re.compile(r"<ul[^>]*>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
+
+
+def flatten_lists(html_text: str) -> str:
+    """Convert all <ol> and <ul> lists to plain paragraphs to avoid WeChat auto-numbering."""
+    html_text = _OL_RE.sub(_flatten_ordered_list, html_text)
+    html_text = _UL_RE.sub(_flatten_unordered_list, html_text)
+    return html_text
+
+
+# ── F7: External Links → Footnotes ───────────────────────────────────────────
 
 
 _HTTP_RE = re.compile(r"https?://", re.IGNORECASE)
@@ -751,19 +797,22 @@ def render(markdown_text: str) -> str:
         # F5: Markdown → HTML
         text = md_to_html(text)
 
-        # F6: External links → footnotes
+        # F6: Flatten lists to plain paragraphs（规避微信编辑器自动编号打断）
+        text = flatten_lists(text)
+
+        # F7: External links → footnotes
         text = extract_links_as_footnotes(text)
 
-        # F7: Inline style injection
+        # F8: Inline style injection
         text = inject_inline_styles(text)
 
-        # F8: Code syntax highlighting
+        # F9: Code syntax highlighting
         text = process_code_blocks(text)
 
-        # F9: Table wrapper
+        # F10: Table wrapper
         text = _wrap_tables(text)
 
-        # F10: Multi-level blockquote styling
+        # F11: Multi-level blockquote styling
         text = _style_blockquotes(text)
 
         return text
