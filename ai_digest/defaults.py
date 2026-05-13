@@ -72,10 +72,8 @@ def build_default_source_specs() -> list[SourceSpec]:
         SourceSpec(name="量子位", url="https://www.qbitai.com/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/", "/post/", "/news/", "/202")),
         SourceSpec(name="CSDN AI", url="https://aillm.csdn.net/", kind="web_news_index", category="news", allowed_path_prefixes=("/article/details/", "/p/", "/news/", "/article/")),
         # ── RSS 订阅 ──
-        SourceSpec(name="雷锋网", url="https://www.leiphone.com/feed", kind="rss", category="news"),
+        SourceSpec(name="大黑AI速报", url="https://news.daheiai.com/rss.php", kind="rss", category="news"),
         SourceSpec(name="爱范儿", url="https://www.ifanr.com/feed", kind="rss", category="news"),
-        SourceSpec(name="DeepMind Blog", url="https://rsshub.rssforever.com/deepmind/blog", kind="rss", category="news"),
-        SourceSpec(name="DeepLearning AI 周报", url="https://rsshub.rssforever.com/deeplearning/thebatch", kind="rss", category="news"),
         SourceSpec(name="Solidot 科技", url="https://rsshub.rssforever.com/solidot/www", kind="rss", category="news"),
         SourceSpec(name="InfoQ 中文", url="https://rsshub.rssforever.com/infoq/recommend", kind="rss", category="news"),
         SourceSpec(name="iThome 台灣 AI", url="https://rsshub.rssforever.com/ithome/tw/feeds/ai", kind="rss", category="news"),
@@ -83,7 +81,6 @@ def build_default_source_specs() -> list[SourceSpec]:
         SourceSpec(name="OpenClaw", url="https://openclaw.ai/blog", kind="web_news_index", category="news", allowed_path_prefixes=("/blog/",)),
         SourceSpec(name="Kiro", url="https://kiro.dev/blog/", kind="web_news_index", category="news", allowed_path_prefixes=("/blog/",)),
         SourceSpec(name="NVIDIA Blog", url="https://blogs.nvidia.com/blog/category/generative-ai/", kind="web_news_index", category="news", allowed_path_prefixes=("/blog/",)),
-        SourceSpec(name="商汤", url="https://sensetime.com/cn/news-index", kind="web_news_index", category="news", allowed_path_prefixes=("/cn/news-detail",)),
         # TODO: 待验证 - 阶跃星辰 (static.stepfun.com/blog/)
         # SourceSpec(name="阶跃星辰", url="https://static.stepfun.com/blog/", kind="web_news_index", category="news", allowed_path_prefixes=("/blog/",)),
         # TODO: 待验证 - MiniMax (Next.js 客户端渲染，web_news_index 可能无法抓取)
