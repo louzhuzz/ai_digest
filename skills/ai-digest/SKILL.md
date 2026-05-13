@@ -86,6 +86,13 @@ sys.stdout.buffer.write(output.encode("utf-8"))                             # st
 - **`--title` 必须非空**：`publish` 命令的 `--title` 参数若为空或省略，`digest` 字段会为空，微信 API 返回 `[44004] empty content hint` 错误。发布命令必须带 `--title "具体标题"`。
 - **发布后检查草稿**：webfetch 草稿预览链接确认排版正常、图片可显示。
 
+### 渲染阶段（wechat_renderer.py）
+- **微信不尊重 `<pre>` 的 white-space**：不能用常规浏览器 `<pre>` 保空白方案。所有主流微信 Markdown 编辑器均采用 `<br>` + `&nbsp;` 硬编码格式。`process_code_blocks` 在 pygments 高亮后自动将 `\n` → `<br>`、空格 → `&nbsp;`。
+- **macOS 三色圆点**：代码块顶部自动嵌入红/黄/绿 SVG 圆点（类似 Xcode/VS Code 风格）。
+- **`nl2br` 已移除**：不再使用 `md_to_html` 的 `nl2br` 扩展，它会在表格、列表、引用中插入多余 `<br>` 导致微信显示空行。
+- **代码块使用浅色 `#f8fafc` 背景 + 14px 字号**，区别于行内代码的蓝色背景。
+- **外链自动转为 `[n]` 脚注**：微信发布后外链不可点击，renderer 自动收集所有非微信链接 → 去重编号为 `[1]`、`[2]`… 上标 → 文末 "📎 参考来源" 区列出完整 URL。同一 URL 复用编号。
+
 ### 持久化阶段
 - **Windows 下 `dedup` 用文件输入，不用 stdin 管道**：PowerShell 的 `|` 管道会破坏 UTF-8 编码。正确做法：`python -m ai_digest.tool_run dedup < data/items_collected.json`（重定向）。
 - **`persist` 必须在发布后立即执行**：否则今天去重的新闻明天会重新出现。

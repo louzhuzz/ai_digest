@@ -79,7 +79,7 @@ THEME = {
             "display": "block",
             "margin": "16px auto",
             "border-radius": "6px",
-            "box-shadow": "0 2px 8px rgba(0,0,0,0.08)",
+            "border": "1px solid #e5e7eb",
         },
         "blockquote": {
             "border-left": "4px solid #2563eb",
@@ -104,16 +104,16 @@ THEME = {
             "font-family": "'SF Mono', Consolas, 'Courier New', monospace",
         },
         "code_block": {
-            "background": "#1e293b",
-            "color": "#e2e8f0",
-            "padding": "16px 20px",
+            "background": "#f8fafc",
+            "color": "#1e293b",
+            "padding": "4px 20px 16px",
             "border-radius": "8px",
             "overflow-x": "auto",
             "margin": "16px 0",
-            "font-size": "13px",
-            "line-height": "1.6",
+            "font-size": "14px",
+            "line-height": "1.7",
         },
-        "pre": {"margin": "0", "padding": "0", "background": "transparent"},
+        "pre": {"margin": "16px 0", "padding": "0", "background": "#f8fafc", "border-radius": "8px", "overflow-x": "auto", "font-size": "14px", "font-family": "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace", "line-height": "1.7"},
         "table": {
             "width": "100%",
             "border-collapse": "collapse",
@@ -422,7 +422,7 @@ def md_to_html(text: str) -> str:
         )
     return markdown.markdown(
         text,
-        extensions=["tables", "fenced_code", "nl2br"],
+        extensions=["tables", "fenced_code"],
     )
 
 
@@ -479,16 +479,29 @@ _HTTP_RE = re.compile(r"https?://", re.IGNORECASE)
 
 
 def extract_links_as_footnotes(html_text: str) -> str:
-    """Convert external <a href> links to footnote superscripts."""
-    links: list[tuple[str, str]] = []
+    """Convert external <a href> links to footnote superscripts.
+    微信发布后外链不可点击，转为 [n] 上标索引并附文末来源列表。"""
+
+    # 对同一 URL 去重
+    links: list[tuple[str, str]] = []       # (url, label)
+    link_index: dict[str, int] = {}          # url → index
 
     def _collect_links(m: re.Match) -> str:
         url = m.group(1)
         label = m.group(2)
         if _HTTP_RE.search(url):
-            idx = len(links) + 1
-            links.append((url, label))
-            return f'{html.escape(label)}<sup style="font-size:12px;color:#3b82f6;vertical-align:super">[{idx}]</sup>'
+            # 去重
+            if url in link_index:
+                idx = link_index[url]
+            else:
+                idx = len(links) + 1
+                link_index[url] = idx
+                links.append((url, label))
+            return (
+                f'{html.escape(label)}'
+                f'<sup style="font-size:12px;color:#3b82f6;vertical-align:super">'
+                f"[{idx}]</sup>"
+            )
         return m.group(0)
 
     processed = re.sub(r'<a href="([^"]+)"[^>]*>(.*?)</a>', _collect_links, html_text)
@@ -499,15 +512,17 @@ def extract_links_as_footnotes(html_text: str) -> str:
     footnote_items = ""
     for i, (url, label) in enumerate(links, 1):
         footnote_items += (
-            f'<div style="line-height:1.8">'
-            f'[{i}] <a href="{html.escape(url, quote=True)}" style="color:#3b82f6">'
-            f"{html.escape(label)}</a></div>"
+            f'<div style="line-height:1.8;font-size:13px;color:#6b7280">'
+            f'<span style="color:#3b82f6;font-weight:600">[{i}]</span> '
+            f'{html.escape(label)}: '
+            f'<span style="color:#9ca3af;word-break:break-all">{html.escape(url)}</span>'
+            f"</div>"
         )
 
     footnotes_html = (
-        f'<hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb">'
-        f'<div style="font-size:12px;color:#9ca3af;margin-top:8px">'
-        f'<div style="font-weight:700;margin-bottom:4px">参考来源：</div>'
+        f'<hr style="margin:24px 0;border:none;border-top:2px solid #2563eb">'
+        f'<div style="font-size:13px;color:#6b7280;margin-top:8px">'
+        f'<div style="font-weight:700;color:#374151;margin-bottom:8px">📎 参考来源</div>'
         f"{footnote_items}</div>"
     )
     return processed + footnotes_html
@@ -636,72 +651,138 @@ def inject_inline_styles(html_text: str) -> str:
     return html_text
 
 
-# ── F8: Regex-based Code Syntax Highlighting ──────────────────────────────────
+# ── F8: Pygments Code Syntax Highlighting ──────────────────────────────────────
+# 使用 pygments 替代手写 regex 高亮，避免嵌套 span / 空字节 / 注释误伤等 bug
 
 
-_CODE_KW = (
-    r"\b(import|from|def|class|return|if|else|elif|for|while|with|as|in|not|and|"
-    r"or|is|None|True|False|try|except|finally|raise|async|await|lambda|yield|"
-    r"global|nonlocal|pass|break|continue|assert|del|and|or|not|in|is)\b"
-)
+_PYGMENTS_LANG_MAP: dict[str, str] = {
+    # Python
+    "python": "python3",
+    "py": "python3",
+    "python3": "python3",
+    # JavaScript/TypeScript
+    "js": "javascript",
+    "javascript": "javascript",
+    "ts": "typescript",
+    "typescript": "typescript",
+    "jsx": "jsx",
+    "tsx": "tsx",
+    "json": "json",
+    "jsonc": "json",  # JSONC is close enough to JSON
+    # Web
+    "html": "html",
+    "css": "css",
+    "xml": "xml",
+    "svg": "xml",
+    # Shell
+    "bash": "bash",
+    "sh": "bash",
+    "shell": "bash",
+    "zsh": "bash",
+    "powershell": "ps1",
+    "ps1": "ps1",
+    # C family
+    "c": "c",
+    "cpp": "cpp",
+    "c++": "cpp",
+    "c#": "csharp",
+    "csharp": "csharp",
+    "cs": "csharp",
+    "java": "java",
+    "go": "go",
+    "rust": "rust",
+    "rs": "rust",
+    "swift": "swift",
+    "kotlin": "kotlin",
+    "kt": "kotlin",
+    # Data
+    "sql": "sql",
+    "yaml": "yaml",
+    "yml": "yaml",
+    "toml": "toml",
+    "ini": "ini",
+    "dockerfile": "docker",
+    "makefile": "makefile",
+    # Diff
+    "diff": "diff",
+    "patch": "diff",
+}
 
 
 def _highlight_code(code: str, lang: str) -> str:
-    """Apply regex-based syntax highlighting to code content."""
-    # Keywords (blue, bold)
-    code = re.sub(_CODE_KW, r'<span style="color:#3b82f6;font-weight:600">\1</span>', code)
-    # Strings (orange) — handle triple-quoted and single/double quoted
-    code = re.sub(
-        r'(["\']{3})(.*?)(\1)',
-        r'<span style="color:#f97316">\1\2\3</span>',
-        code,
-        flags=re.DOTALL,
-    )
-    code = re.sub(
-        r'(["\'])(?:(?=(\\?))\2.)*?\1',
-        r'<span style="color:#f97316">\0</span>',
-        code,
-    )
-    # Comments (gray, italic)
-    code = re.sub(
-        r"(#.*)$",
-        r'<span style="color:#9ca3af;font-style:italic">\1</span>',
-        code,
-        flags=re.MULTILINE,
-    )
-    # Numbers (green)
-    code = re.sub(
-        r"\b(\d+\.?\d*)\b",
-        r'<span style="color:#22c55e">\1</span>',
-        code,
-    )
-    return code
+    """使用 pygments 语法高亮，返回带内联样式的 HTML。"""
+    if not lang:
+        return html.escape(code)
+    from pygments import highlight as pyg_highlight
+    from pygments.lexers import get_lexer_by_name
+    from pygments.formatters import HtmlFormatter
+
+    lexer_name = _PYGMENTS_LANG_MAP.get(lang.lower(), lang.lower())
+    try:
+        lexer = get_lexer_by_name(lexer_name, stripnl=False, stripall=False)
+    except Exception:
+        # 找不到对应 lexer，当作纯文本
+        return html.escape(code)
+
+    formatter = HtmlFormatter(noclasses=True, style="friendly", nowrap=True)
+    try:
+        highlighted = pyg_highlight(code, lexer, formatter)
+    except Exception:
+        return html.escape(code)
+    # pygments 在 noclasses=True 时会自动转义文本内容，
+    # but 偶尔会输出多余换行，trim 一下
+    return highlighted.strip("\n")
 
 
 _CODE_BLOCK_RE = re.compile(
-    r"<pre><code(?:\s+class=[^>]*)?>(.*?)</code></pre>",
+    r"<pre[^>]*><code(?:\s+class=[^>]*)?>(.*?)</code></pre>",
     re.DOTALL | re.IGNORECASE,
 )
 
 
 def process_code_blocks(html_text: str) -> str:
-    """Apply regex-based syntax highlighting inside <pre><code> blocks."""
+    """Apply pygments syntax highlighting, then hardcode whitespace for WeChat.
+    微信不尊重 <pre> 的 white-space，必须用 <br>+&nbsp; 硬编码格式。"""
+
+    # macOS 三色圆点 SVG
+    _MAC_DOTS = (
+        '<span style="display:block;padding:12px 16px 4px">'
+        '<svg width="52" height="12" viewBox="0 0 52 12" xmlns="http://www.w3.org/2000/svg">'
+        '<circle cx="6" cy="6" r="6" fill="#FF5F56"/>'
+        '<circle cx="26" cy="6" r="6" fill="#FFBD2E"/>'
+        '<circle cx="46" cy="6" r="6" fill="#27C93F"/>'
+        "</svg></span>"
+    )
+
+    def _code_whitespace(highlighted: str) -> str:
+        """将换行符替换为 <br>，文本内空格替换为 &nbsp;，保留 <span> 标签结构。"""
+        # 1. 换行 → <br>
+        highlighted = highlighted.replace("\n", "<br>")
+        # 2. 用正则分割 HTML 标签和文本段，仅文本段内的空格转为 &nbsp;
+        parts = re.split(r"(<[^>]+>)", highlighted)
+        for i, part in enumerate(parts):
+            if not part.startswith("<"):
+                parts[i] = part.replace(" ", "&nbsp;")
+        return "".join(parts)
 
     def _replace(m: re.Match) -> str:
-        code_content = m.group(1)
-        # Unescape HTML entities from markdown processing
-        code_content = html.unescape(code_content)
-        # Detect language from class attribute
+        raw_html = m.group(1)
+        plain_text = html.unescape(raw_html)
         lang_match = re.search(
             r'class=["\']?[^"\']*language-([a-z0-9]+)[^"\']*["\']?',
             m.group(0),
             re.IGNORECASE,
         )
         lang = lang_match.group(1) if lang_match else ""
-        highlighted = _highlight_code(code_content, lang)
-        # Re-escape for HTML output
-        highlighted = html.escape(highlighted)
-        return f"<pre style=\"{build_style_string(THEME['styles']['pre'])}\"><code>{highlighted}</code></pre>"
+        highlighted = _highlight_code(plain_text, lang)
+        # 微信硬编码空白（br + &nbsp;）
+        highlighted = _code_whitespace(highlighted)
+        # 移除末尾可能多余的 <br>
+        if highlighted.endswith("<br>"):
+            highlighted = highlighted[: -len("<br>")]
+        # 使用 <div> 而非 <code> 包裹高亮内容，避免 inject_inline_styles
+        # 将行内 <code> 样式误应用于代码块
+        return f"<pre>{_MAC_DOTS}<div style=\"padding:0 20px 16px\">{highlighted}</div></pre>"
 
     return _CODE_BLOCK_RE.sub(_replace, html_text)
 
@@ -803,11 +884,12 @@ def render(markdown_text: str) -> str:
         # F7: External links → footnotes
         text = extract_links_as_footnotes(text)
 
-        # F8: Inline style injection
-        text = inject_inline_styles(text)
-
-        # F9: Code syntax highlighting
+        # F8: Code syntax highlighting（先于 inject_inline_styles 执行，
+        #     确保能匹配到 <pre><code> 尚未被注入 style 属性的原始状态）
         text = process_code_blocks(text)
+
+        # F9: Inline style injection
+        text = inject_inline_styles(text)
 
         # F10: Table wrapper
         text = _wrap_tables(text)
