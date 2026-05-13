@@ -755,14 +755,17 @@ def process_code_blocks(html_text: str) -> str:
     )
 
     def _code_whitespace(highlighted: str) -> str:
-        """将换行符替换为 <br>，文本内空格替换为 &nbsp;，保留 <span> 标签结构。"""
+        """将换行符替换为 <br>，文本内空格替换为 Unicode NBSP（\xa0）。
+        微信编辑器会剥离 <span> 标签和 &nbsp; 实体，但 Unicode NBSP
+        作为纯文本字符可穿透 ProseMirror 转换保留缩进。"""
         # 1. 换行 → <br>
         highlighted = highlighted.replace("\n", "<br>")
-        # 2. 用正则分割 HTML 标签和文本段，仅文本段内的空格转为 &nbsp;
+        # 2. 用正则分割 HTML 标签和文本段，仅文本段内的空格转为 \xa0
         parts = re.split(r"(<[^>]+>)", highlighted)
         for i, part in enumerate(parts):
             if not part.startswith("<"):
-                parts[i] = part.replace(" ", "&nbsp;")
+                # 使用 Unicode NBSP（\xa0）而非 HTML 实体 &nbsp;
+                parts[i] = part.replace(" ", "\xa0")
         return "".join(parts)
 
     def _replace(m: re.Match) -> str:
@@ -780,9 +783,9 @@ def process_code_blocks(html_text: str) -> str:
         # 移除末尾可能多余的 <br>
         if highlighted.endswith("<br>"):
             highlighted = highlighted[: -len("<br>")]
-        # 使用 <div> 而非 <code> 包裹高亮内容，避免 inject_inline_styles
-        # 将行内 <code> 样式误应用于代码块
-        return f"<pre>{_MAC_DOTS}<div style=\"padding:0 20px 16px\">{highlighted}</div></pre>"
+        # 使用 <span> 包裹高亮内容（避开 inject_inline_styles 对 <code>
+        # 的行内样式注入），加 white-space:pre-wrap 兜底让微信保留空格
+        return f"<pre>{_MAC_DOTS}<span style=\"display:block;padding:0 20px 16px;white-space:pre-wrap\">{highlighted}</span></pre>"
 
     return _CODE_BLOCK_RE.sub(_replace, html_text)
 
